@@ -1,0 +1,2236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ScopeKit · Eridion</title>
+<meta name="theme-color" content="#24324D" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   ScopeKit — Eridion
+   Design system: architectural utility on Eridion brand
+   ============================================================ */
+
+:root {
+  /* Brand (locked) */
+  --bg: #F7F7F5;
+  --navy: #24324D;
+  --green: #53964F;
+  --green-dark: #437D40;
+  --body: #363634;
+  --border: #757573;
+
+  /* Derived */
+  --paper: #FFFFFF;
+  --ink: #1A1F2E;
+  --muted: #8E8E8B;
+  --hairline: #E2E2DD;
+  --hairline-strong: #C9C9C2;
+  --warning: #B8742B;
+  --danger: #A33A3A;
+  --tint-navy: rgba(36, 50, 77, 0.06);
+  --tint-green: rgba(83, 150, 79, 0.08);
+
+  /* Type */
+  --display: 'Fraunces', 'Georgia', serif;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', 'Menlo', monospace;
+
+  /* Layout */
+  --bar: 56px;
+  --maxw: 1280px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--body);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Subtle blueprint grid behind everything (low contrast) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(36, 50, 77, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(36, 50, 77, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  z-index: 0;
+}
+
+button, input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+a { color: var(--navy); }
+
+/* ===== Top bar ===== */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--navy);
+  color: var(--bg);
+  border-bottom: 1px solid var(--ink);
+  height: var(--bar);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 14px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+.brand-mark {
+  width: 22px; height: 22px;
+  border: 1.5px solid var(--bg);
+  position: relative;
+}
+.brand-mark::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid var(--green);
+}
+.brand-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  border-left: 1px solid rgba(255,255,255,0.2);
+  padding-left: 12px;
+  margin-left: 4px;
+}
+.topbar-spacer { flex: 1; }
+.topbar-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.25);
+  color: var(--bg);
+  padding: 7px 12px;
+  font-size: 12px;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: all 0.15s var(--ease);
+}
+.topbar-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }
+.topbar-btn.is-active { background: var(--green); border-color: var(--green); }
+
+/* ===== Layout ===== */
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 20px 16px 120px;
+}
+@media (min-width: 720px) {
+  .app { padding: 28px 24px 80px; }
+}
+
+.screen { display: none; }
+.screen.is-active { display: block; animation: fade 0.25s var(--ease); }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.crumbs {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.crumbs .sep { opacity: 0.4; }
+.crumbs .now { color: var(--navy); }
+
+.h-display {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: clamp(28px, 5vw, 40px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+.h-sub {
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 60ch;
+  margin: 0 0 24px;
+}
+
+.h-section {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+
+/* ===== Cards ===== */
+.card {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 18px;
+  position: relative;
+}
+/* Architectural corner marks */
+.card.marked::before,
+.card.marked::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--navy);
+}
+.card.marked::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+.card.marked::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+.card-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.card-title {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 18px;
+  color: var(--ink);
+  margin: 0;
+}
+.card-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Stack & grid */
+.stack > * + * { margin-top: 14px; }
+.stack-lg > * + * { margin-top: 24px; }
+.grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 720px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1000px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.row-tight { display: flex; align-items: center; gap: 6px; }
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:hover { background: var(--tint-navy); }
+.btn.primary {
+  background: var(--green);
+  border-color: var(--green-dark);
+  color: white;
+}
+.btn.primary:hover { background: var(--green-dark); }
+.btn.ghost {
+  background: transparent;
+  border-color: var(--hairline-strong);
+  color: var(--body);
+}
+.btn.ghost:hover { background: var(--paper); border-color: var(--border); }
+.btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn.sm { padding: 7px 12px; font-size: 13px; }
+.btn-icon {
+  width: 14px; height: 14px;
+  display: inline-flex;
+  align-items: center;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ===== Form fields ===== */
+.field { display: block; }
+.field-lbl {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+.field-input,
+.field-area,
+.field-select {
+  width: 100%;
+  padding: 11px 12px;
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  font-size: 15px;
+  color: var(--ink);
+  transition: border-color 0.15s var(--ease);
+}
+.field-input:focus,
+.field-area:focus,
+.field-select:focus {
+  outline: none;
+  border-color: var(--navy);
+}
+.field-area { font-family: var(--sans); resize: vertical; min-height: 100px; }
+.field-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* ===== Toggle switch (top-level Builder vs Homeowner) ===== */
+.bigtoggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  padding: 4px;
+  position: relative;
+  margin-bottom: 28px;
+}
+.bigtoggle button {
+  background: transparent;
+  border: none;
+  padding: 16px 14px;
+  cursor: pointer;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 17px;
+  color: var(--muted);
+  letter-spacing: -0.01em;
+  border-radius: var(--r-sm);
+  transition: all 0.2s var(--ease);
+}
+.bigtoggle button.is-active {
+  background: var(--navy);
+  color: white;
+}
+.bigtoggle button .label-mono {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  opacity: 0.6;
+}
+.bigtoggle button.is-active .label-mono { opacity: 0.7; }
+
+/* ===== Confidence badges (architectural-annotation style) ===== */
+.conf {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  background: var(--paper);
+}
+.conf::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.conf.high { color: var(--green); }
+.conf.med { color: var(--warning); }
+.conf.low { color: var(--danger); }
+
+.mode-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: var(--tint-navy);
+  color: var(--navy);
+}
+.mode-badge.auto { background: var(--tint-green); color: var(--green-dark); }
+
+/* ===== Bathroom / item card ===== */
+.bath {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  position: relative;
+}
+.bath-h {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bath-h h3 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 18px;
+  margin: 0;
+  color: var(--ink);
+}
+.bath-h .sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.bath-body { padding: 14px 16px; }
+
+.bathfield {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--hairline);
+}
+.bathfield:last-child { border-bottom: none; }
+.bathfield-lbl {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--navy);
+}
+.bathfield-val {
+  font-size: 14px;
+  color: var(--ink);
+}
+.bathfield-val.dim { font-family: var(--mono); font-weight: 500; }
+.bathfield input, .bathfield select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  font-size: 13px;
+}
+.bathfield input:focus, .bathfield select:focus { outline: none; border-color: var(--navy); background: var(--paper); }
+
+@media (max-width: 540px) {
+  .bathfield { grid-template-columns: 1fr; gap: 4px; padding: 8px 0; }
+  .bathfield > .conf { justify-self: start; }
+}
+
+/* Flag chips (from comm parser) */
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--tint-green);
+  border: 1px solid rgba(83, 150, 79, 0.3);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--green-dark);
+  margin: 4px 4px 0 0;
+}
+.flag::before { content: '◆'; font-size: 8px; }
+.flag.attn { background: rgba(184, 116, 43, 0.08); border-color: rgba(184, 116, 43, 0.3); color: var(--warning); }
+
+/* ===== Builder strip (intake context) ===== */
+.builder-strip {
+  background: var(--navy);
+  color: var(--bg);
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.builder-strip .name {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+.builder-strip .pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 2px;
+}
+.builder-strip .pill.posture-cost { background: rgba(184, 116, 43, 0.2); border-color: rgba(184, 116, 43, 0.5); }
+.builder-strip .pill.posture-prem { background: rgba(83, 150, 79, 0.25); border-color: rgba(83, 150, 79, 0.5); }
+.builder-strip .pill.posture-neut { background: rgba(255,255,255,0.08); }
+
+/* ===== Step indicator ===== */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.steps .step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.steps .step .dot {
+  width: 8px; height: 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+}
+.steps .step.done { color: var(--green-dark); }
+.steps .step.done .dot { background: var(--green); border-color: var(--green); }
+.steps .step.active { color: var(--navy); font-weight: 600; }
+.steps .step.active .dot { background: var(--navy); border-color: var(--navy); }
+.steps .sep {
+  width: 18px;
+  height: 1px;
+  background: var(--hairline-strong);
+}
+
+/* ===== Sketch picker (homeowner direct) ===== */
+.sketch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 540px) { .sketch-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 900px) { .sketch-grid { grid-template-columns: repeat(5, 1fr); } }
+
+.sketch {
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  padding: 14px 10px 10px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s var(--ease);
+}
+.sketch:hover { border-color: var(--navy); }
+.sketch.is-active {
+  border-color: var(--green);
+  background: var(--tint-green);
+  box-shadow: 0 0 0 2px var(--green) inset;
+}
+.sketch svg { display: block; margin: 0 auto 8px; width: 60px; height: 60px; }
+.sketch .lbl {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--navy);
+}
+
+/* ===== Upload dropzone ===== */
+.dropzone {
+  border: 1.5px dashed var(--hairline-strong);
+  border-radius: var(--r-md);
+  padding: 28px 20px;
+  text-align: center;
+  background: var(--paper);
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+}
+.dropzone:hover, .dropzone.is-drag {
+  border-color: var(--navy);
+  background: var(--tint-navy);
+}
+.dropzone .dz-icon {
+  width: 44px; height: 44px;
+  margin: 0 auto 10px;
+  border: 1.5px solid var(--navy);
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--navy);
+}
+.dropzone .dz-title {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 17px;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.dropzone .dz-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+.dropzone-files {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--green-dark);
+  text-align: left;
+}
+.dropzone-files div { padding: 4px 0; }
+
+/* ===== Loader ===== */
+.loader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--navy);
+}
+.loader .spin {
+  width: 16px; height: 16px;
+  border: 2px solid var(--hairline-strong);
+  border-top-color: var(--navy);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Sticky CTA ===== */
+.sticky-cta {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, var(--bg) 60%, rgba(247,247,245,0));
+  padding: 16px;
+  z-index: 30;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  max-width: var(--maxw);
+  margin: 0 auto;
+}
+.sticky-cta .btn { flex: 1; }
+@media (min-width: 720px) {
+  .sticky-cta { padding: 16px 24px 24px; }
+  .sticky-cta .btn { flex: 0 0 auto; }
+}
+
+/* ===== Drawer (builder profiles) ===== */
+.drawer-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 31, 46, 0.4);
+  z-index: 60;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease);
+}
+.drawer-bg.is-open { opacity: 1; pointer-events: auto; }
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(540px, 100%);
+  background: var(--bg);
+  z-index: 61;
+  transform: translateX(100%);
+  transition: transform 0.25s var(--ease);
+  overflow-y: auto;
+  border-left: 1px solid var(--hairline-strong);
+  display: flex;
+  flex-direction: column;
+}
+.drawer.is-open { transform: none; }
+.drawer-h {
+  position: sticky;
+  top: 0;
+  background: var(--navy);
+  color: white;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1;
+}
+.drawer-h h2 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 18px;
+  margin: 0;
+}
+.drawer-body { padding: 18px; flex: 1; }
+
+.builder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: all 0.15s var(--ease);
+}
+.builder-row:hover { border-color: var(--navy); }
+.builder-row .nm {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--ink);
+}
+.builder-row .meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ===== Site-visit checklist ===== */
+.checklist {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.cl-section-h {
+  background: var(--navy);
+  color: white;
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.cl-section-h.warn { background: var(--danger); }
+.cl-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.cl-item:last-child { border-bottom: none; }
+.cl-item input[type=checkbox] {
+  margin-top: 2px;
+  accent-color: var(--green);
+  width: 16px; height: 16px;
+}
+.cl-item .body { flex: 1; }
+.cl-item .body .lbl { font-weight: 500; color: var(--ink); }
+.cl-item .body .ctx {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+/* ===== Render preview ===== */
+.render-frame {
+  aspect-ratio: 4/3;
+  background: var(--bg);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.render-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(45deg, transparent 0, transparent 20px, rgba(36,50,77,0.025) 20px, rgba(36,50,77,0.025) 21px);
+}
+.render-frame .placeholder {
+  position: relative;
+  z-index: 1;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.render-frame .placeholder strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 17px;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--navy);
+  letter-spacing: -0.01em;
+  text-transform: none;
+  margin-bottom: 6px;
+}
+
+/* ===== Output screen drop-zone ===== */
+.sg-mirror {
+  background: repeating-linear-gradient(0deg,
+    var(--paper) 0, var(--paper) 38px,
+    var(--bg) 38px, var(--bg) 39px
+  );
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--r-md);
+  padding: 18px;
+  position: relative;
+}
+.sg-mirror::after {
+  content: 'DROP-IN ZONE — SG SCREENSHOTS PENDING';
+  position: absolute;
+  top: 8px; right: 12px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--warning);
+}
+
+/* Helpers */
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); }
+.tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 2px;
+  color: var(--navy);
+}
+.divider {
+  height: 1px;
+  background: var(--hairline);
+  margin: 18px 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  border: 0;
+}
+
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <span>ScopeKit</span>
+    <span class="brand-sub">Eridion · Internal</span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <button class="topbar-btn" id="open-builders">Builders</button>
+  <button class="topbar-btn" id="reset-job">New Job</button>
+</header>
+
+<main class="app">
+
+  <!-- ============ Screen: Intake ============ -->
+  <section class="screen is-active" id="screen-intake">
+    <div class="crumbs">
+      <span class="now">Step 0 · Intake</span>
+    </div>
+    <h1 class="h-display">Start a new job.</h1>
+    <p class="h-sub">Builder project on a plan set, or homeowner direct from photos and rough dimensions. ScopeKit produces the visual scope reference Erika types into Smart Glazier.</p>
+
+    <div class="bigtoggle" id="intake-toggle">
+      <button data-mode="builder" class="is-active">
+        <span class="label-mono">Path A</span>
+        Builder project
+      </button>
+      <button data-mode="homeowner">
+        <span class="label-mono">Path B</span>
+        Homeowner direct
+      </button>
+    </div>
+
+    <!-- ====== Builder intake ====== -->
+    <div id="intake-builder" class="stack-lg">
+      <div class="card marked">
+        <div class="card-h">
+          <h2 class="card-title">1 · Smart Glazier template</h2>
+          <span class="card-meta">Optional</span>
+        </div>
+        <div class="row" style="margin-bottom: 12px;">
+          <label class="row-tight"><input type="radio" name="sg-template" value="yes" /> Have a template for this builder</label>
+          <label class="row-tight"><input type="radio" name="sg-template" value="no" checked /> Build from Eridion default scope library</label>
+        </div>
+        <div id="sg-template-upload" style="display:none;">
+          <div class="dropzone" data-target="sg-template">
+            <div class="dz-icon">+</div>
+            <div class="dz-title">Paste or upload SG template screenshots</div>
+            <div class="dz-hint">⌘V works on desktop · camera capture on mobile</div>
+            <input type="file" accept="image/*" multiple class="sr-only" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card marked">
+        <div class="card-h">
+          <h2 class="card-title">2 · Plan PDF</h2>
+          <span class="card-meta">Required</span>
+        </div>
+        <div class="dropzone" data-target="plan">
+          <div class="dz-icon">⌘</div>
+          <div class="dz-title">Upload plan PDF</div>
+          <div class="dz-hint">Vector text extracted directly · Claude vision falls back for raster pages</div>
+          <input type="file" accept="application/pdf,image/*" multiple class="sr-only" />
+        </div>
+        <div class="dropzone-files" id="plan-files"></div>
+
+        <div class="row" style="margin-top:14px;">
+          <label class="row-tight">
+            <input type="checkbox" id="revision-flag" />
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Plan revision · diff against last set</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card marked">
+          <h2 class="card-title" style="margin-bottom: 10px;">3 · Builder</h2>
+          <div class="field">
+            <label class="field-lbl">Auto-detect from title block</label>
+            <select id="builder-select" class="field-select">
+              <option value="">— Detecting from plan… —</option>
+            </select>
+            <div class="field-hint" id="builder-hint">Override anytime. Detection improves with each plan.</div>
+          </div>
+        </div>
+        <div class="card marked">
+          <h2 class="card-title" style="margin-bottom: 10px;">Architect</h2>
+          <div class="field">
+            <label class="field-lbl">Architect on this set</label>
+            <select id="architect-select" class="field-select">
+              <option value="">— Select builder first —</option>
+            </select>
+            <div class="field-hint">New architect? Auto-added to builder profile.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card marked">
+        <div class="card-h">
+          <h2 class="card-title">4 · Builder communication</h2>
+          <span class="card-meta">Optional</span>
+        </div>
+        <div class="field">
+          <label class="field-lbl">Paste text, screenshot, or type notes</label>
+          <textarea class="field-area" id="comm-input" placeholder='e.g. "The wall in the master is 48" tall between the tub and shower. Please give me an option for framed and frameless on the shower. We need some nice mirrors in the master. And in the powder room."'></textarea>
+          <div class="field-hint">Each item parsed and tagged to the relevant bathroom card.</div>
+        </div>
+      </div>
+
+      <div class="card marked">
+        <h2 class="card-title" style="margin-bottom: 10px;">5 · Project address</h2>
+        <div class="field">
+          <label class="field-lbl">Address</label>
+          <input class="field-input" id="project-address" placeholder="e.g. 4521 Lakeside Dr, Highland Park, TX 75205" />
+          <div class="field-hint">Drives sub assignment — Zuritex DFW or Citizens Little Rock.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== Homeowner intake ====== -->
+    <div id="intake-homeowner" class="stack-lg" style="display:none;">
+      <div class="card marked">
+        <div class="card-h">
+          <h2 class="card-title">1 · Photos</h2>
+          <span class="card-meta">Optional · single, multi, or none</span>
+        </div>
+        <div class="dropzone" data-target="ho-photos">
+          <div class="dz-icon">◉</div>
+          <div class="dz-title">Upload photos of the space</div>
+          <div class="dz-hint">Camera capture works on mobile · multiple OK</div>
+          <input type="file" accept="image/*" multiple class="sr-only" />
+        </div>
+        <div class="dropzone-files" id="ho-photos-files"></div>
+      </div>
+
+      <div class="card marked">
+        <h2 class="card-title" style="margin-bottom: 10px;">2 · Rough dimensions</h2>
+        <div class="field">
+          <label class="field-lbl">Free-form — Claude parses and structures</label>
+          <textarea class="field-area" id="ho-dims" placeholder='e.g. "About 60 wide, ceiling is 8ft, glass wall going to about here, niche on the back wall around chest height"'></textarea>
+        </div>
+      </div>
+
+      <div class="card marked">
+        <h2 class="card-title" style="margin-bottom: 10px;">3 · Configuration</h2>
+        <div class="sketch-grid" id="sketch-picker"></div>
+      </div>
+
+      <div class="card marked">
+        <h2 class="card-title" style="margin-bottom: 10px;">4 · Style preferences</h2>
+        <div class="grid grid-2">
+          <div class="field">
+            <label class="field-lbl">Frame style</label>
+            <select class="field-select" id="ho-frame">
+              <option>Frameless</option>
+              <option>Semi-frameless</option>
+              <option>Framed</option>
+              <option>Show options for both</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-lbl">Hardware finish</label>
+            <select class="field-select" id="ho-finish">
+              <option>Brushed nickel</option>
+              <option>Chrome</option>
+              <option>Matte black</option>
+              <option>Champagne bronze</option>
+              <option>Polished brass</option>
+            </select>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="row" style="font-size: 12px; color: var(--warning);">
+          <span class="tag" style="color: var(--warning); border-color: var(--warning);">Site visit always required</span>
+          <span>— field measurement is the primary dimension source for homeowner-direct.</span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============ Screen: Review extraction ============ -->
+  <section class="screen" id="screen-review">
+    <div class="crumbs">
+      <span>Intake</span>
+      <span class="sep">›</span>
+      <span class="now">Step 2 · Review extraction</span>
+    </div>
+
+    <div id="builder-strip-wrap" style="margin-bottom: 18px;"></div>
+
+    <h1 class="h-display">Review what we pulled.</h1>
+    <p class="h-sub">One card per bathroom and per other glass item. Each correction trains the builder profile. Confidence recalculates on edit, or set it manually.</p>
+
+    <div id="review-cards" class="stack-lg"></div>
+
+    <div class="divider"></div>
+
+    <h2 class="h-section" style="margin-bottom: 12px;">Pricing tolerance — two-layer</h2>
+    <div class="grid grid-2">
+      <div class="card">
+        <label class="field-lbl">Builder posture</label>
+        <select id="posture" class="field-select">
+          <option value="cost">Cost-conscious</option>
+          <option value="neutral" selected>Neutral</option>
+          <option value="premium">Premium</option>
+        </select>
+        <div class="field-hint">Drives margin and which options to show.</div>
+      </div>
+      <div class="card">
+        <label class="field-lbl">Decision-maker</label>
+        <select id="decision-maker" class="field-select">
+          <option value="builder-direct" selected>Builder direct</option>
+          <option value="builder-relayed">Builder-relayed-to-homeowner</option>
+          <option value="homeowner">Homeowner direct</option>
+        </select>
+        <div class="field-hint">Toggles plain-language vs. trade-language on output.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Screen: Configure ============ -->
+  <section class="screen" id="screen-configure">
+    <div class="crumbs">
+      <span>Intake</span>
+      <span class="sep">›</span>
+      <span>Review</span>
+      <span class="sep">›</span>
+      <span class="now">Step 3 · Configure & visualize</span>
+    </div>
+
+    <h1 class="h-display">Spec each enclosure.</h1>
+    <p class="h-sub">Configuration auto-suggested from opening width. Render is a vibe asset for sales — not a technical drawing.</p>
+
+    <div id="configure-cards" class="stack-lg"></div>
+  </section>
+
+  <!-- ============ Screen: Output ============ -->
+  <section class="screen" id="screen-output">
+    <div class="crumbs">
+      <span>Intake</span>
+      <span class="sep">›</span>
+      <span>Review</span>
+      <span class="sep">›</span>
+      <span>Configure</span>
+      <span class="sep">›</span>
+      <span class="now">Step 4 · Output</span>
+    </div>
+
+    <h1 class="h-display">Visual scope reference.</h1>
+    <p class="h-sub">Mirrors Smart Glazier quote entry layout. Glance back and forth as you type into SG.</p>
+
+    <div class="grid grid-2 stack-lg" style="align-items: start;">
+      <div>
+        <h2 class="h-section" style="margin-bottom: 12px;">Smart Glazier mirror</h2>
+        <div class="sg-mirror" id="sg-mirror"></div>
+      </div>
+      <div>
+        <h2 class="h-section" style="margin-bottom: 12px;">Sub assignment</h2>
+        <div class="card" id="sub-assign"></div>
+
+        <h2 class="h-section" style="margin-top: 24px; margin-bottom: 12px;">Branded proposal PDF</h2>
+        <div class="card">
+          <p class="muted" style="margin: 0 0 12px; font-size: 14px;">Eridion-branded, includes AI rendering, scope, price ranges. Priority asset for first-time bids.</p>
+          <button class="btn primary" id="generate-pdf">Generate proposal PDF</button>
+          <div class="field-hint" style="margin-top: 8px;">Stub for MVP — wire to PDF generator next.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <h2 class="h-section" style="margin-bottom: 12px;">Site visit checklist</h2>
+    <p class="muted" style="margin: 0 0 14px; font-size: 14px;">Always-on. Travels with the work order to the installer. Photo capture prompts per item land in Monday.com.</p>
+    <div id="checklist-output" class="checklist"></div>
+
+  </section>
+
+</main>
+
+<!-- Sticky CTA -->
+<div class="sticky-cta" id="sticky-cta">
+  <button class="btn ghost" id="cta-back" style="display:none;">← Back</button>
+  <button class="btn primary" id="cta-next">Continue →</button>
+</div>
+
+<!-- Drawer: Builders -->
+<div class="drawer-bg" id="drawer-bg"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-h">
+    <h2>Builder profiles</h2>
+    <button class="topbar-btn" id="close-drawer">Close</button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<script>
+/* ============================================================
+   ScopeKit · MVP build
+   Single-file vanilla JS · GitHub Pages friendly
+   API endpoint configurable for Cloudflare Worker swap
+   ============================================================ */
+
+// =============== CONFIG ===============
+// SWAP POINT: When deploying, set this to your Cloudflare Worker URL.
+// In artifact preview, the proxy below routes through window.claude.complete (Anthropic API).
+const API_CONFIG = {
+  // Set to e.g. 'https://scopekit-worker.frosty-basef01e.workers.dev' on deploy.
+  // Empty string = use in-artifact Anthropic API for preview.
+  workerUrl: '',
+  fluxEnabled: false, // requires Worker — Flux gen stubbed in preview
+};
+
+// =============== PRE-SEEDED BUILDER PROFILES ===============
+const BUILDERS = [
+  {
+    id: 'hines',
+    name: 'Hines Homes',
+    address: '',
+    architects: ['Aubrey Architecture', 'Cole + Co'],
+    billing: { contact: 'Megan', email: 'ap@hineshomes.com', format: 'PDF invoice' },
+    minimum: null,
+    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear' },
+    posture: 'neutral',
+    decisionMaker: 'builder-direct',
+    planQuirk: 'Scale varies by page — verify per page on every plan',
+    scaleConventions: { floorPlan: '1/4"', detail: '1/2"' },
+    notes: 'Auto-prompts "verify scale per page" at intake.',
+  },
+  {
+    id: 'lingenfelter',
+    name: 'Lingenfelter Homes',
+    address: '',
+    architects: ['Lingenfelter In-House'],
+    billing: { contact: 'AP', email: 'accounting@lingenfelterluxuryhomes.com', format: 'PDF invoice' },
+    minimum: null,
+    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Low-iron' },
+    posture: 'premium',
+    decisionMaker: 'builder-relayed',
+    planQuirk: 'Framers consistently run 1/4" wide — verify rough opening on site',
+    notes: 'Builder forwards bid, homeowner green-lights. Plain-language toggle recommended on output.',
+  },
+  {
+    id: 'grand',
+    name: 'Grand Homes',
+    address: '',
+    architects: ['North Division'],
+    billing: { contact: 'AP', email: 'billing@grandhomes.com', format: 'PDF invoice' },
+    minimum: null,
+    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear' },
+    posture: 'cost',
+    decisionMaker: 'builder-direct',
+    notes: 'North Division contact.',
+  },
+  {
+    id: 'gutman',
+    name: 'Gutman Homes',
+    address: '',
+    architects: [],
+    billing: {},
+    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear' },
+    posture: 'neutral',
+    decisionMaker: 'builder-direct',
+  },
+  {
+    id: 'martyn',
+    name: 'Martyn Hammer',
+    address: '',
+    architects: [],
+    billing: {},
+    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Matte black', treatment: 'Clear' },
+    posture: 'premium',
+    decisionMaker: 'builder-direct',
+  },
+  {
+    id: 'drhorton',
+    name: 'DR Horton',
+    address: '',
+    architects: [],
+    billing: {},
+    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear' },
+    posture: 'cost',
+    decisionMaker: 'builder-direct',
+    notes: 'Production builder — value-engineered defaults.',
+  },
+  {
+    id: 'artistic-metal',
+    name: 'Artistic Metal Fabricators',
+    address: '',
+    architects: [],
+    billing: {},
+    defaults: { frame: 'Frameless', glass: '1/2"', finish: 'Matte black', treatment: 'Low-iron' },
+    posture: 'neutral',
+    decisionMaker: 'builder-direct',
+    notes: 'Formerly Shawn Harned.',
+  },
+  {
+    id: 'small-commercial',
+    name: 'Small Commercial',
+    address: '',
+    architects: [],
+    billing: {},
+    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear' },
+    posture: 'neutral',
+    decisionMaker: 'builder-direct',
+    notes: 'Catch-all for one-off commercial bids.',
+  },
+  {
+    id: 'home-owner',
+    name: 'Home Owner',
+    address: '',
+    architects: [],
+    billing: {},
+    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear' },
+    posture: 'neutral',
+    decisionMaker: 'homeowner',
+    isClientType: true,
+    notes: 'Plain-language line items always. Site visit always required.',
+  },
+  {
+    id: 'preston-trail',
+    name: 'Preston Trail Homes',
+    address: '',
+    architects: [],
+    billing: {},
+    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear' },
+    posture: 'cost',
+    decisionMaker: 'builder-direct',
+    planQuirk: 'Plans note "SCALE: AS NOTED" — verify per page',
+    notes: 'Reactivated under new ownership April 2026. Cost-conscious until learned otherwise.',
+  },
+];
+
+const SKETCH_OPTIONS = [
+  { id: 'alcove',     label: 'Alcove',         svg: '<rect x="8" y="8" width="44" height="44" fill="none" stroke="#24324D" stroke-width="2"/><line x1="8" y1="20" x2="52" y2="20" stroke="#53964F" stroke-width="2"/>' },
+  { id: 'neo',        label: 'Neo-angle',      svg: '<polygon points="8,52 8,18 22,8 38,8 52,18 52,52" fill="none" stroke="#24324D" stroke-width="2"/><line x1="22" y1="8" x2="38" y2="8" stroke="#53964F" stroke-width="2"/>' },
+  { id: 'corner',     label: 'Corner',         svg: '<rect x="8" y="8" width="44" height="44" fill="none" stroke="#24324D" stroke-width="2"/><line x1="8" y1="20" x2="20" y2="20" stroke="#53964F" stroke-width="2"/><line x1="20" y1="8" x2="20" y2="20" stroke="#53964F" stroke-width="2"/>' },
+  { id: 'inline',     label: 'Inline panel',   svg: '<line x1="8" y1="30" x2="52" y2="30" stroke="#24324D" stroke-width="2"/><rect x="14" y="12" width="32" height="36" fill="none" stroke="#53964F" stroke-width="2"/>' },
+  { id: 'sliding',    label: 'Bypass slider',  svg: '<rect x="6" y="14" width="48" height="32" fill="none" stroke="#24324D" stroke-width="2"/><line x1="30" y1="14" x2="30" y2="46" stroke="#53964F" stroke-width="2"/><line x1="22" y1="14" x2="22" y2="46" stroke="#53964F" stroke-width="2" opacity="0.5"/>' },
+];
+
+// =============== STATE ===============
+const state = {
+  step: 'intake',
+  intakeMode: 'builder', // 'builder' | 'homeowner'
+  builder: null,         // selected builder ID
+  architect: null,
+  address: '',
+  comm: '',
+  planFiles: [],
+  hoPhotos: [],
+  hoDims: '',
+  hoSketch: null,
+  hoFrame: 'Frameless',
+  hoFinish: 'Brushed nickel',
+  sgTemplate: 'no',
+  revision: false,
+
+  posture: 'neutral',
+  decisionMaker: 'builder-direct',
+
+  // Extraction results
+  bathrooms: [],   // [{ id, name, ceiling, shower, vanityCount, mirror, features, confidences, mode, flags }]
+  otherItems: [],  // [{ id, type, dims, ... }]
+  scaleStatus: null,
+
+  // Per-shower configs
+  showerConfigs: {}, // by bathroom id
+
+  // Loading flags
+  extracting: false,
+  parsingComm: false,
+};
+
+// =============== UTIL ===============
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+const el = (tag, cls, html) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+};
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// =============== STEP NAV ===============
+const STEPS = ['intake', 'review', 'configure', 'output'];
+function gotoStep(name) {
+  if (!STEPS.includes(name)) return;
+  state.step = name;
+  $$('.screen').forEach(s => s.classList.remove('is-active'));
+  $('#screen-' + name).classList.add('is-active');
+  // Scroll to top so mobile users see the new step
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  updateCTA();
+  if (name === 'review') renderReview();
+  if (name === 'configure') renderConfigure();
+  if (name === 'output') renderOutput();
+}
+function updateCTA() {
+  const back = $('#cta-back');
+  const next = $('#cta-next');
+  const i = STEPS.indexOf(state.step);
+  back.style.display = i === 0 ? 'none' : '';
+  if (i === STEPS.length - 1) {
+    next.textContent = 'Mark complete · start new';
+  } else if (state.step === 'intake') {
+    next.textContent = state.extracting ? 'Extracting…' : 'Extract & continue →';
+  } else {
+    next.textContent = 'Continue →';
+  }
+  next.disabled = state.extracting;
+}
+
+// =============== INTAKE: toggle ===============
+$$('#intake-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#intake-toggle button').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    state.intakeMode = btn.dataset.mode;
+    $('#intake-builder').style.display = state.intakeMode === 'builder' ? '' : 'none';
+    $('#intake-homeowner').style.display = state.intakeMode === 'homeowner' ? '' : 'none';
+    if (state.intakeMode === 'homeowner') {
+      // Auto-select Home Owner profile
+      state.builder = 'home-owner';
+      state.posture = 'neutral';
+      state.decisionMaker = 'homeowner';
+    } else {
+      state.builder = null;
+    }
+  });
+});
+
+// =============== INTAKE: SG template radio ===============
+$$('input[name=sg-template]').forEach(r => {
+  r.addEventListener('change', () => {
+    state.sgTemplate = r.value;
+    $('#sg-template-upload').style.display = r.value === 'yes' ? '' : 'none';
+  });
+});
+
+// =============== INTAKE: Builder dropdown ===============
+const builderSelect = $('#builder-select');
+builderSelect.innerHTML = '<option value="">— Select builder —</option>' +
+  BUILDERS.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+
+builderSelect.addEventListener('change', () => {
+  state.builder = builderSelect.value;
+  const b = BUILDERS.find(x => x.id === state.builder);
+  const hint = $('#builder-hint');
+  const archSel = $('#architect-select');
+  if (b) {
+    hint.innerHTML = `<strong style="color: var(--green-dark)">Auto-applied:</strong> ${escapeHtml(b.posture)} posture · ${escapeHtml(b.decisionMaker)} · defaults ${escapeHtml(b.defaults.frame)} ${escapeHtml(b.defaults.glass)} ${escapeHtml(b.defaults.finish)}` +
+      (b.planQuirk ? `<br><strong style="color: var(--warning)">Quirk:</strong> ${escapeHtml(b.planQuirk)}` : '');
+    archSel.innerHTML = '<option value="">— Auto-detect or select —</option>' +
+      b.architects.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('') +
+      '<option value="__new__">+ Add new architect</option>';
+    state.posture = b.posture;
+    state.decisionMaker = b.decisionMaker;
+  } else {
+    hint.textContent = 'Override anytime. Detection improves with each plan.';
+    archSel.innerHTML = '<option value="">— Select builder first —</option>';
+  }
+});
+$('#architect-select').addEventListener('change', e => state.architect = e.target.value);
+$('#project-address').addEventListener('input', e => state.address = e.target.value);
+$('#comm-input').addEventListener('input', e => state.comm = e.target.value);
+$('#revision-flag').addEventListener('change', e => state.revision = e.target.checked);
+
+// =============== HOMEOWNER intake ===============
+$('#ho-dims').addEventListener('input', e => state.hoDims = e.target.value);
+$('#ho-frame').addEventListener('change', e => state.hoFrame = e.target.value);
+$('#ho-finish').addEventListener('change', e => state.hoFinish = e.target.value);
+
+// Sketch picker render
+(function buildSketches() {
+  const grid = $('#sketch-picker');
+  SKETCH_OPTIONS.forEach(s => {
+    const div = el('div', 'sketch');
+    div.dataset.id = s.id;
+    div.innerHTML = `<svg viewBox="0 0 60 60">${s.svg}</svg><div class="lbl">${escapeHtml(s.label)}</div>`;
+    div.addEventListener('click', () => {
+      $$('#sketch-picker .sketch').forEach(x => x.classList.remove('is-active'));
+      div.classList.add('is-active');
+      state.hoSketch = s.id;
+    });
+    grid.appendChild(div);
+  });
+})();
+
+// =============== Dropzones ===============
+$$('.dropzone').forEach(dz => {
+  const target = dz.dataset.target;
+  const input = dz.querySelector('input[type=file]');
+  dz.addEventListener('click', () => input.click());
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('is-drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('is-drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('is-drag');
+    handleFiles(target, e.dataTransfer.files);
+  });
+  input.addEventListener('change', e => handleFiles(target, e.target.files));
+});
+function handleFiles(target, fileList) {
+  const files = Array.from(fileList);
+  if (target === 'plan') {
+    state.planFiles = files;
+    renderFileList('#plan-files', files);
+  } else if (target === 'ho-photos') {
+    state.hoPhotos = files;
+    renderFileList('#ho-photos-files', files);
+  }
+}
+function renderFileList(sel, files) {
+  const wrap = $(sel);
+  wrap.innerHTML = files.map(f => `<div>✓ ${escapeHtml(f.name)} · ${(f.size/1024).toFixed(0)} KB</div>`).join('');
+}
+
+// Paste support for the comm box (image paste)
+$('#comm-input').addEventListener('paste', async (e) => {
+  const items = e.clipboardData?.items || [];
+  for (const it of items) {
+    if (it.type.startsWith('image/')) {
+      // For MVP: indicate image was pasted; full vision parsing happens server-side or via Claude API
+      e.preventDefault();
+      const blob = it.getAsFile();
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base = $('#comm-input').value;
+        $('#comm-input').value = base + (base ? '\n' : '') + `[image pasted · ${blob.name || 'screenshot'} · ${(blob.size/1024).toFixed(0)}KB · will be parsed by Claude vision]`;
+        state.comm = $('#comm-input').value;
+      };
+      reader.readAsDataURL(blob);
+    }
+  }
+});
+
+// =============== STICKY CTA ===============
+$('#cta-back').addEventListener('click', () => {
+  const i = STEPS.indexOf(state.step);
+  if (i > 0) gotoStep(STEPS[i - 1]);
+});
+$('#cta-next').addEventListener('click', async () => {
+  const i = STEPS.indexOf(state.step);
+  if (state.step === 'intake') {
+    await runExtraction();
+    return;
+  }
+  if (i < STEPS.length - 1) {
+    gotoStep(STEPS[i + 1]);
+  } else {
+    if (confirm('Mark this job complete and start a new one?')) resetJob();
+  }
+});
+
+$('#reset-job').addEventListener('click', () => {
+  if (confirm('Clear current job and start over?')) resetJob();
+});
+function resetJob() {
+  Object.assign(state, {
+    step: 'intake',
+    intakeMode: 'builder',
+    builder: null,
+    architect: null,
+    address: '',
+    comm: '',
+    planFiles: [],
+    hoPhotos: [],
+    hoDims: '',
+    hoSketch: null,
+    sgTemplate: 'no',
+    revision: false,
+    posture: 'neutral',
+    decisionMaker: 'builder-direct',
+    bathrooms: [],
+    otherItems: [],
+    scaleStatus: null,
+    showerConfigs: {},
+    extracting: false,
+  });
+  // Reset DOM
+  $('#builder-select').value = '';
+  $('#architect-select').innerHTML = '<option value="">— Select builder first —</option>';
+  $('#project-address').value = '';
+  $('#comm-input').value = '';
+  $('#ho-dims').value = '';
+  $('#plan-files').innerHTML = '';
+  $('#ho-photos-files').innerHTML = '';
+  $$('#sketch-picker .sketch').forEach(x => x.classList.remove('is-active'));
+  $('#revision-flag').checked = false;
+  $$('input[name=sg-template]').forEach(r => r.checked = r.value === 'no');
+  $('#sg-template-upload').style.display = 'none';
+  $$('#intake-toggle button').forEach(b => b.classList.toggle('is-active', b.dataset.mode === 'builder'));
+  $('#intake-builder').style.display = '';
+  $('#intake-homeowner').style.display = 'none';
+  $('#builder-hint').textContent = 'Override anytime. Detection improves with each plan.';
+  gotoStep('intake');
+}
+
+// =============== EXTRACTION ===============
+async function runExtraction() {
+  if (state.intakeMode === 'builder' && state.planFiles.length === 0 && !state.builder) {
+    alert('Upload a plan PDF or pick a builder before continuing.');
+    return;
+  }
+  state.extracting = true;
+  updateCTA();
+
+  // For MVP preview: produce a realistic mock extraction.
+  // When a Cloudflare Worker is configured, real Claude extraction (PDF + vision) runs server-side.
+  let extractionResult = null;
+  try {
+    if (API_CONFIG.workerUrl) {
+      extractionResult = await extractViaWorker();
+    } else if (state.intakeMode === 'builder' && state.comm && state.comm.trim().length > 20) {
+      // In-artifact preview: use Claude to actually parse the comm block.
+      // Plan PDF parsing requires the Worker (pdf.js + raster vision pipeline).
+      extractionResult = await extractCommViaClaude();
+    } else {
+      extractionResult = mockExtraction();
+    }
+  } catch (err) {
+    console.warn('Extraction failed, falling back to mock:', err);
+    extractionResult = mockExtraction();
+  }
+
+  applyExtraction(extractionResult);
+
+  // Local regex parser runs always as a backstop on the comm block
+  if (state.comm && state.comm.trim()) {
+    parseCommBlock(state.comm);
+  }
+
+  state.extracting = false;
+  gotoStep('review');
+}
+
+async function extractCommViaClaude() {
+  // Use the Anthropic API to actually parse the comm block.
+  // SWAP POINT: in production this routes through Cloudflare Worker (API_CONFIG.workerUrl).
+  const prompt = `You are parsing a builder communication for a glass shop. Identify pony walls (with heights), framed/frameless option requests, mirror requests, and any niche/bench/feature mentions. Tag each to a bathroom location if mentioned (master, powder, jack-and-jill, etc.).
+
+Communication:
+"""
+${state.comm}
+"""
+
+Return JSON ONLY, no prose, no markdown, in this exact shape:
+{"items":[{"type":"ponywall|frame_option|mirror|niche|bench|other","value":"description","location":"master|powder|hall|jack_jill|secondary|unknown"}]}`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error('Claude API error: ' + res.status);
+  const data = await res.json();
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+  let parsed = { items: [] };
+  try {
+    const clean = text.replace(/```json|```/g, '').trim();
+    parsed = JSON.parse(clean);
+  } catch (e) {
+    console.warn('Could not parse Claude JSON:', text);
+  }
+  // Combine with mock extraction baseline (we still need bathroom skeleton from "the plan")
+  const base = mockExtraction();
+  base._commParsed = parsed;
+  return base;
+}
+
+async function extractViaWorker() {
+  // SWAP POINT: Cloudflare Worker call goes here.
+  // Worker handles: pdf.js text extraction, Claude vision on raster pages,
+  // returns structured bathroom/feature data + scale status.
+  const fd = new FormData();
+  state.planFiles.forEach((f, i) => fd.append('plan_' + i, f));
+  fd.append('builder', state.builder || '');
+  fd.append('comm', state.comm || '');
+  const res = await fetch(API_CONFIG.workerUrl + '/extract', {
+    method: 'POST',
+    body: fd,
+  });
+  if (!res.ok) throw new Error('Worker error: ' + res.status);
+  return await res.json();
+}
+
+function mockExtraction() {
+  // Realistic shape so the UI is meaningful in preview without the worker.
+  if (state.intakeMode === 'homeowner') {
+    return {
+      bathrooms: [{
+        id: 'bath-1',
+        name: 'Homeowner project',
+        ceiling: { value: '8\'-0"', conf: 'med', mode: 'auto' },
+        shower: {
+          type: { value: 'Walk-in', conf: 'high', mode: 'auto' },
+          dims: { value: state.hoDims || '60" wide × 36" deep', conf: 'low', mode: 'auto' },
+          features: [],
+        },
+        vanity: { count: 1, dims: { value: 'TBD on site', conf: 'low', mode: 'auto' } },
+        mirror: { value: 'TBD', conf: 'low', mode: 'auto' },
+        flags: [{ kind: 'attn', text: 'Site visit required — primary dimension source' }],
+      }],
+      otherItems: [],
+      scaleStatus: null,
+    };
+  }
+  // Builder mock — synthesizes a plausible 2-bath plan
+  return {
+    bathrooms: [
+      {
+        id: 'bath-1',
+        name: 'Master bath',
+        ceiling: { value: '10\'-0"', conf: 'high', mode: 'auto' },
+        shower: {
+          type: { value: 'Curbless walk-in', conf: 'high', mode: 'auto' },
+          dims: { value: '72" × 42"', conf: 'high', mode: 'auto' },
+          features: ['Linear drain', 'Niche 24×14', 'Bench 18×60'],
+        },
+        vanity: { count: 2, dims: { value: '72" × 22" each', conf: 'med', mode: 'auto' } },
+        mirror: { value: '36" × 42" framed', conf: 'med', mode: 'auto' },
+        flags: [],
+      },
+      {
+        id: 'bath-2',
+        name: 'Powder bath',
+        ceiling: { value: '9\'-0"', conf: 'high', mode: 'auto' },
+        shower: { type: { value: '— none —', conf: 'high', mode: 'auto' }, dims: { value: '—', conf: 'high', mode: 'auto' }, features: [] },
+        vanity: { count: 1, dims: { value: '36" × 20"', conf: 'high', mode: 'auto' } },
+        mirror: { value: '24" × 30"', conf: 'low', mode: 'auto' },
+        flags: [],
+      },
+    ],
+    otherItems: [],
+    scaleStatus: state.builder === 'hines' ?
+      { detected: 'Per page · varies', conf: 'med', warning: 'Hines profile: scale varies by page — verify each before quoting' } :
+      { detected: '1/4" = 1\'-0"', conf: 'high', warning: null },
+  };
+}
+
+function applyExtraction(result) {
+  state.bathrooms = result.bathrooms;
+  state.otherItems = result.otherItems || [];
+  state.scaleStatus = result.scaleStatus;
+  // If Claude parsed comm items in addition, fold them in
+  if (result._commParsed?.items?.length) {
+    foldCommItems(result._commParsed.items);
+  }
+}
+
+// =============== Communication parser ===============
+function parseCommBlock(txt) {
+  // Local fallback parser — runs always; Claude parser augments when available.
+  const lower = txt.toLowerCase();
+  const items = [];
+
+  // Pony wall detection
+  const ponyMatches = txt.match(/(\d{1,3})\s*["']?\s*(?:tall\s*)?(?:pony\s*wall|wall.*?(?:between|tub|shower))/gi) || [];
+  ponyMatches.forEach(m => {
+    const num = m.match(/(\d{1,3})/);
+    if (num) {
+      const loc = lower.includes('master') ? 'master' : lower.includes('powder') ? 'powder' : 'unknown';
+      items.push({ type: 'ponywall', value: `${num[1]}" pony wall`, location: loc });
+    }
+  });
+
+  // Framed/frameless dual option
+  if (/framed.+frameless|frameless.+framed|both options|dual option/i.test(txt)) {
+    const loc = lower.includes('master') ? 'master' : 'unknown';
+    items.push({ type: 'frame_option', value: 'Show framed AND frameless options', location: loc });
+  }
+
+  // Mirrors
+  const mirrorRe = /mirror[s]?\s+(?:in\s+(?:the\s+)?)?(master|powder|hall|jack\s*[-\s]?and\s*[-\s]?jill|secondary|guest)/gi;
+  let mm;
+  while ((mm = mirrorRe.exec(txt)) !== null) {
+    const loc = mm[1].toLowerCase().replace(/[^a-z]/g,'');
+    items.push({ type: 'mirror', value: 'Mirror line item', location: /master/.test(loc) ? 'master' : /powder/.test(loc) ? 'powder' : /jack/.test(loc) ? 'jack_jill' : 'secondary' });
+  }
+
+  foldCommItems(items);
+}
+function foldCommItems(items) {
+  items.forEach(it => {
+    const target = state.bathrooms.find(b => {
+      if (it.location === 'master') return /master/i.test(b.name);
+      if (it.location === 'powder') return /powder/i.test(b.name);
+      if (it.location === 'jack_jill') return /jack/i.test(b.name);
+      return false;
+    });
+    if (!target) {
+      // Create a missing-bath card if the comm references a room not in the plan
+      const placeholderName = it.location === 'powder' ? 'Powder bath' :
+                              it.location === 'master' ? 'Master bath' :
+                              it.location === 'jack_jill' ? 'Jack & Jill' : 'Other bath';
+      let nb = state.bathrooms.find(b => b.name === placeholderName);
+      if (!nb) {
+        nb = {
+          id: 'bath-comm-' + Math.random().toString(36).slice(2,7),
+          name: placeholderName,
+          ceiling: { value: 'TBD', conf: 'low', mode: 'auto' },
+          shower: { type: { value: 'TBD', conf: 'low', mode: 'auto' }, dims: { value: 'TBD', conf: 'low', mode: 'auto' }, features: [] },
+          vanity: { count: 1, dims: { value: 'TBD', conf: 'low', mode: 'auto' } },
+          mirror: { value: 'TBD', conf: 'low', mode: 'auto' },
+          flags: [],
+          fromComm: true,
+        };
+        state.bathrooms.push(nb);
+      }
+      pushFlag(nb, { kind: 'good', text: it.value });
+    } else {
+      pushFlag(target, { kind: 'good', text: it.value });
+      // Specific feature folding (also deduped)
+      if (it.type === 'ponywall' && target.shower) {
+        target.shower.features = target.shower.features || [];
+        if (!target.shower.features.includes(it.value)) target.shower.features.push(it.value);
+      }
+      if (it.type === 'frame_option') {
+        target._dualFrame = true;
+      }
+    }
+  });
+}
+function pushFlag(target, flag) {
+  target.flags = target.flags || [];
+  // Dedupe by text (case-insensitive, near-match)
+  const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const exists = target.flags.some(f => norm(f.text) === norm(flag.text));
+  if (!exists) target.flags.push(flag);
+}
+
+// =============== REVIEW SCREEN ===============
+function renderReview() {
+  // Builder strip
+  const stripWrap = $('#builder-strip-wrap');
+  const b = BUILDERS.find(x => x.id === state.builder);
+  if (b) {
+    const postureCls = b.posture === 'cost' ? 'posture-cost' : b.posture === 'premium' ? 'posture-prem' : 'posture-neut';
+    stripWrap.innerHTML = `
+      <div class="builder-strip">
+        <div>
+          <div class="name">${escapeHtml(b.name)}</div>
+          <div style="font-family: var(--mono); font-size: 11px; opacity: 0.7; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px;">
+            ${escapeHtml(state.architect || (b.architects[0] || '— architect TBD —'))}
+            ${state.address ? ' · ' + escapeHtml(state.address) : ''}
+          </div>
+        </div>
+        <span class="pill ${postureCls}">${escapeHtml(b.posture)}</span>
+        <span class="pill">${escapeHtml(b.decisionMaker)}</span>
+        ${state.scaleStatus ? `<span class="pill" title="Scale">scale ${escapeHtml(state.scaleStatus.detected)}</span>` : ''}
+      </div>
+      ${state.scaleStatus?.warning ? `
+        <div style="margin-top: 10px; padding: 10px 14px; background: rgba(184,116,43,0.08); border: 1px solid rgba(184,116,43,0.3); border-radius: 6px; font-size: 13px; color: var(--warning);">
+          <strong style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Scale alert</strong> · ${escapeHtml(state.scaleStatus.warning)}
+        </div>` : ''}
+    `;
+  } else {
+    stripWrap.innerHTML = '';
+  }
+
+  // Sync posture/dm controls to state
+  $('#posture').value = state.posture;
+  $('#decision-maker').value = state.decisionMaker;
+  $('#posture').onchange = e => state.posture = e.target.value;
+  $('#decision-maker').onchange = e => state.decisionMaker = e.target.value;
+
+  // Render bathroom cards
+  const wrap = $('#review-cards');
+  wrap.innerHTML = '';
+  state.bathrooms.forEach(bath => {
+    wrap.appendChild(renderBathCard(bath));
+  });
+
+  // Add other items (mirrors, closet doors, etc.) — placeholder for MVP
+  if (state.otherItems.length) {
+    state.otherItems.forEach(o => {
+      const c = el('div', 'card marked');
+      c.innerHTML = `<div class="card-h"><h3 class="card-title">${escapeHtml(o.name || 'Other glass item')}</h3><span class="card-meta">${escapeHtml(o.type || 'item')}</span></div>`;
+      wrap.appendChild(c);
+    });
+  }
+}
+
+function renderBathCard(bath) {
+  const c = el('div', 'bath');
+  const flagHtml = (bath.flags || []).map(f =>
+    `<span class="flag ${f.kind === 'attn' ? 'attn' : ''}">${escapeHtml(f.text)}</span>`).join('');
+
+  c.innerHTML = `
+    <div class="bath-h">
+      <div>
+        <h3>${escapeHtml(bath.name)}</h3>
+        <div class="sub">${bath.fromComm ? 'Created from communication' : 'From plan extraction'}</div>
+      </div>
+      <div class="row-tight">
+        <span class="conf ${bath.shower?.dims?.conf || 'med'}">${(bath.shower?.dims?.conf || 'med').toUpperCase()} · shower dims</span>
+      </div>
+    </div>
+    <div class="bath-body">
+      ${flagHtml ? `<div style="margin-bottom: 10px;">${flagHtml}</div>` : ''}
+      ${bathField('Ceiling height', bath.ceiling, 'ceiling')}
+      ${bathField('Shower type', bath.shower?.type, 'shower.type')}
+      ${bathField('Shower dims', bath.shower?.dims, 'shower.dims', true)}
+      ${bath.shower?.features?.length ? `
+        <div class="bathfield">
+          <div class="bathfield-lbl">Features</div>
+          <div class="bathfield-val">${bath.shower.features.map(escapeHtml).join(' · ')}</div>
+          <span class="conf high">HIGH</span>
+        </div>` : ''}
+      ${bathField('Vanity count', { value: String(bath.vanity?.count ?? 0), conf: 'high', mode: 'auto' }, 'vanity.count', false, true)}
+      ${bathField('Vanity dims', bath.vanity?.dims, 'vanity.dims', true)}
+      ${bathField('Mirror', bath.mirror, 'mirror')}
+    </div>
+  `;
+  // Wire field edits → recalc confidence to "auto" mode
+  c.querySelectorAll('input[data-field]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const target = resolvePath(bath, inp.dataset.field);
+      if (target && typeof target === 'object') {
+        target.value = inp.value;
+      } else {
+        // Scalar leaf (e.g., vanity.count) — set parent.leaf
+        const segs = inp.dataset.field.split('.');
+        const leaf = segs.pop();
+        const parent = resolvePath(bath, segs.join('.')) || bath;
+        if (parent) parent[leaf] = inp.value;
+      }
+      // Update conf badge to MED + auto mode (edits introduce uncertainty until verified)
+      const badge = inp.closest('.bathfield')?.querySelector('.conf');
+      if (badge && !badge.dataset.manual) {
+        badge.classList.remove('high', 'med', 'low');
+        badge.classList.add('med');
+        badge.textContent = 'MED · AUTO';
+        if (target && typeof target === 'object') {
+          target.conf = 'med';
+          target.mode = 'auto';
+        }
+      }
+    });
+  });
+  // Wire confidence badges → click cycles HIGH/MED/LOW (manual mode)
+  c.querySelectorAll('.conf[data-toggle]').forEach(badge => {
+    badge.addEventListener('click', () => {
+      const order = ['high', 'med', 'low'];
+      const cur = order.find(o => badge.classList.contains(o)) || 'med';
+      const next = order[(order.indexOf(cur) + 1) % 3];
+      badge.classList.remove('high', 'med', 'low');
+      badge.classList.add(next);
+      badge.textContent = next.toUpperCase() + ' · MANUAL';
+      badge.dataset.manual = '1';
+      // Persist to state if we have a path
+      const path = badge.dataset.path;
+      if (path) {
+        const target = resolvePath(bath, path);
+        if (target && typeof target === 'object') {
+          target.conf = next;
+          target.mode = 'manual';
+        }
+      }
+    });
+  });
+  return c;
+}
+
+// Resolve dotted path against an object — returns the leaf object (or undefined)
+function resolvePath(obj, path) {
+  if (!path) return undefined;
+  return path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
+}
+
+function bathField(label, valObj, path, isDim=false, scalarLeaf=false) {
+  if (!valObj) valObj = { value: '—', conf: 'med', mode: 'auto' };
+  const conf = valObj.conf || 'med';
+  const mode = valObj.mode || 'auto';
+  return `
+    <div class="bathfield">
+      <div class="bathfield-lbl">${escapeHtml(label)}</div>
+      <input type="text" data-field="${escapeHtml(path)}" value="${escapeHtml(valObj.value || '')}" class="${isDim ? 'mono' : ''}" />
+      <span class="conf ${conf}" data-toggle data-path="${escapeHtml(path)}" title="Tap to override (manual)">${conf.toUpperCase()} · ${mode.toUpperCase()}</span>
+    </div>
+  `;
+}
+
+// =============== CONFIGURE SCREEN ===============
+function renderConfigure() {
+  const wrap = $('#configure-cards');
+  wrap.innerHTML = '';
+  const showers = state.bathrooms.filter(b => b.shower?.type?.value && !/none|tbd|—/i.test(b.shower.type.value));
+  if (!showers.length) {
+    wrap.innerHTML = '<div class="card"><p class="muted" style="margin:0;">No shower enclosures detected to configure. Add via the review step or proceed to output for non-shower glass items.</p></div>';
+    return;
+  }
+  const builderDef = BUILDERS.find(b => b.id === state.builder)?.defaults || {};
+  showers.forEach(s => {
+    if (!state.showerConfigs[s.id]) {
+      state.showerConfigs[s.id] = {
+        config: s._dualFrame ? 'Dual: framed + frameless' : 'Auto · alcove',
+        frame: builderDef.frame || 'Frameless',
+        finish: builderDef.finish || 'Brushed nickel',
+        glass: builderDef.glass || '3/8"',
+        treatment: builderDef.treatment || 'Clear',
+        rendered: false,
+      };
+    }
+    wrap.appendChild(renderConfigCard(s));
+  });
+}
+function renderConfigCard(bath) {
+  const cfg = state.showerConfigs[bath.id];
+  const c = el('div', 'card marked');
+  c.innerHTML = `
+    <div class="card-h">
+      <h3 class="card-title">${escapeHtml(bath.name)} · shower enclosure</h3>
+      <span class="card-meta">${escapeHtml(bath.shower?.dims?.value || '')}</span>
+    </div>
+    <div class="grid grid-2">
+      <div>
+        <div class="field"><label class="field-lbl">Configuration</label>
+          <select class="field-select" data-cfg="config">
+            <option>Auto · alcove</option><option>Neo-angle</option><option>Corner</option><option>Inline panel</option><option>Bypass slider</option><option>Dual: framed + frameless</option>
+          </select></div>
+        <div class="field" style="margin-top:10px;"><label class="field-lbl">Frame style</label>
+          <select class="field-select" data-cfg="frame"><option>Frameless</option><option>Semi-frameless</option><option>Framed</option></select></div>
+        <div class="field" style="margin-top:10px;"><label class="field-lbl">Hardware finish</label>
+          <select class="field-select" data-cfg="finish"><option>Brushed nickel</option><option>Chrome</option><option>Matte black</option><option>Champagne bronze</option><option>Polished brass</option></select></div>
+        <div class="field" style="margin-top:10px;"><label class="field-lbl">Glass thickness · treatment</label>
+          <div class="row" style="gap:8px;">
+            <select class="field-select" data-cfg="glass" style="flex:1;"><option>3/8"</option><option>1/2"</option></select>
+            <select class="field-select" data-cfg="treatment" style="flex:1;"><option>Clear</option><option>Low-iron</option><option>Textured</option></select>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="render-frame">
+          ${cfg.rendered ? `<div class="placeholder"><strong>Render output</strong>${escapeHtml(cfg.frame)} · ${escapeHtml(cfg.finish)} · ${escapeHtml(cfg.glass)} ${escapeHtml(cfg.treatment.toLowerCase())}</div>` :
+            `<div class="placeholder"><strong>${API_CONFIG.fluxEnabled ? 'Click to render' : 'Flux render · worker required'}</strong>~$0.04 / image · vibe asset, not a technical drawing</div>`}
+        </div>
+        <button class="btn ghost sm" style="margin-top:10px;width:100%;" data-render="${bath.id}">${cfg.rendered ? 'Re-render' : (API_CONFIG.fluxEnabled ? 'Generate render' : 'Stub render (preview)')}</button>
+      </div>
+    </div>
+  `;
+  // Wire selects
+  c.querySelectorAll('select[data-cfg]').forEach(sel => {
+    sel.value = cfg[sel.dataset.cfg] || sel.options[0].value;
+    sel.addEventListener('change', () => {
+      cfg[sel.dataset.cfg] = sel.value;
+    });
+  });
+  c.querySelector('[data-render]').addEventListener('click', () => {
+    cfg.rendered = true;
+    renderConfigure();
+  });
+  return c;
+}
+
+// =============== OUTPUT SCREEN ===============
+function renderOutput() {
+  const sg = $('#sg-mirror');
+  const b = BUILDERS.find(x => x.id === state.builder);
+  const showers = state.bathrooms.filter(x => x.shower?.type?.value && !/none|tbd|—/i.test(x.shower.type.value));
+
+  // SG mirror — placeholder structure, will be re-laid-out when Erika sends SG screenshots
+  sg.innerHTML = `
+    <div style="padding-top: 22px;">
+      <div class="row" style="margin-bottom: 12px; align-items: flex-start;">
+        <div style="flex:1;">
+          <div class="field-lbl">Customer · Builder</div>
+          <div style="font-family: var(--display); font-size: 17px;">${escapeHtml(b?.name || '—')}</div>
+        </div>
+        <div style="flex:1;">
+          <div class="field-lbl">Project address</div>
+          <div class="mono" style="font-size: 13px;">${escapeHtml(state.address || 'TBD')}</div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      ${showers.map(s => {
+        const cfg = state.showerConfigs[s.id] || {};
+        return `
+        <div style="margin-bottom: 18px;">
+          <div class="field-lbl" style="color: var(--ink); font-weight: 600;">${escapeHtml(s.name)} — shower enclosure</div>
+          <div style="margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--green);">
+            <div class="mono" style="font-size: 13px;">${escapeHtml(s.shower?.dims?.value || '')} · ${escapeHtml(s.shower?.type?.value || '')}</div>
+            <div style="font-size: 13px; margin-top: 4px;">
+              ${escapeHtml(cfg.frame || '—')} · ${escapeHtml(cfg.glass || '')} ${escapeHtml((cfg.treatment || '').toLowerCase())} · ${escapeHtml(cfg.finish || '')}
+            </div>
+            ${s.shower?.features?.length ? `<div class="mono" style="font-size: 11px; margin-top: 4px; color: var(--muted); letter-spacing: 0.06em;">+ ${s.shower.features.map(escapeHtml).join(' · ')}</div>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+      ${state.bathrooms.filter(x => x.mirror?.value && x.mirror.value !== 'TBD' && x.mirror.value !== '—').map(x => `
+        <div style="margin-bottom: 12px;">
+          <div class="field-lbl" style="color: var(--ink); font-weight: 600;">${escapeHtml(x.name)} — mirror</div>
+          <div style="padding-left: 12px; border-left: 2px solid var(--navy); font-size: 13px; margin-top: 4px;">${escapeHtml(x.mirror.value)}</div>
+        </div>
+      `).join('')}
+      <div class="divider"></div>
+      <div style="font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase;">
+        Pricing posture: ${escapeHtml(state.posture)} · decision-maker: ${escapeHtml(state.decisionMaker)}
+        ${state.decisionMaker === 'homeowner' || state.decisionMaker === 'builder-relayed' ? ' · plain-language ON' : ''}
+      </div>
+    </div>
+  `;
+
+  // Sub assignment
+  const sub = $('#sub-assign');
+  const isAR = /\b(AR|Arkansas|Little Rock|Hot Springs|Bentonville|Fayetteville)\b/i.test(state.address);
+  const subName = isAR ? 'Citizens Glass · Little Rock' : 'Zuritex · DFW';
+  sub.innerHTML = `
+    <div class="row" style="justify-content: space-between;">
+      <div>
+        <div class="card-meta">Recommended sub</div>
+        <div style="font-family: var(--display); font-size: 19px; color: var(--ink); margin-top: 2px;">${escapeHtml(subName)}</div>
+      </div>
+      <span class="tag" style="color: var(--green-dark); border-color: var(--green);">Auto-routed</span>
+    </div>
+    <div class="muted" style="font-size: 13px; margin-top: 8px;">
+      Based on project address. Override on the work order if needed.
+    </div>
+  `;
+
+  // Site visit checklist
+  $('#checklist-output').innerHTML = buildChecklistHtml();
+}
+
+function buildChecklistHtml() {
+  const lows = [];
+  const standards = [
+    { lbl: 'Rough opening width — top, middle, bottom', ctx: 'Standard · all enclosures' },
+    { lbl: 'Plumb on both jambs', ctx: 'Standard' },
+    { lbl: 'Level on curb / threshold', ctx: 'Standard' },
+    { lbl: 'Finished floor-to-ceiling height', ctx: 'Standard' },
+    { lbl: 'Niche rough opening + finished dimensions', ctx: 'Where applicable' },
+    { lbl: 'Pony wall actual height + thickness', ctx: 'Where applicable' },
+    { lbl: 'Photo: full enclosure context', ctx: 'Lands in Monday.com' },
+    { lbl: 'Photo: each corner + glass meeting points', ctx: 'Lands in Monday.com' },
+  ];
+  // LOW items from extraction
+  state.bathrooms.forEach(b => {
+    const fields = [
+      ['Ceiling', b.ceiling],
+      ['Shower type', b.shower?.type],
+      ['Shower dims', b.shower?.dims],
+      ['Vanity dims', b.vanity?.dims],
+      ['Mirror', b.mirror],
+    ];
+    fields.forEach(([n, v]) => {
+      if (v?.conf === 'low') {
+        lows.push({ lbl: `${b.name} — verify ${n.toLowerCase()}`, ctx: `Plan source ${v.value || 'unclear'}` });
+      }
+    });
+  });
+  // Builder-quirk items
+  const builder = BUILDERS.find(x => x.id === state.builder);
+  if (builder?.planQuirk) {
+    lows.push({ lbl: builder.planQuirk, ctx: `Builder profile · ${builder.name}` });
+  }
+  // Homeowner-direct heavy checklist
+  if (state.intakeMode === 'homeowner') {
+    standards.push({ lbl: 'Confirm overall configuration with homeowner on site', ctx: 'Homeowner-direct · plan absent' });
+    standards.push({ lbl: 'Re-measure all dimensions — primary source is field', ctx: 'Homeowner-direct' });
+  }
+
+  return `
+    ${lows.length ? `
+      <div class="cl-section-h warn">Verify before quoting · ${lows.length} item${lows.length === 1 ? '' : 's'}</div>
+      ${lows.map(i => `
+        <label class="cl-item">
+          <input type="checkbox" />
+          <div class="body">
+            <div class="lbl">${escapeHtml(i.lbl)}</div>
+            <div class="ctx">${escapeHtml(i.ctx)}</div>
+          </div>
+        </label>`).join('')}
+    ` : ''}
+    <div class="cl-section-h">Confirm on site before fabrication</div>
+    ${standards.map(i => `
+      <label class="cl-item">
+        <input type="checkbox" />
+        <div class="body">
+          <div class="lbl">${escapeHtml(i.lbl)}</div>
+          <div class="ctx">${escapeHtml(i.ctx)}</div>
+        </div>
+      </label>`).join('')}
+  `;
+}
+
+// =============== Generate proposal PDF (stub) ===============
+$('#generate-pdf').addEventListener('click', () => {
+  alert('Branded PDF generator — wired next pass. Will use the rendered config + scope + price ranges on Eridion letterhead.');
+});
+
+// =============== BUILDER DRAWER ===============
+const drawer = $('#drawer');
+const drawerBg = $('#drawer-bg');
+$('#open-builders').addEventListener('click', () => {
+  drawer.classList.add('is-open');
+  drawerBg.classList.add('is-open');
+  renderDrawer();
+});
+$('#close-drawer').addEventListener('click', closeDrawer);
+drawerBg.addEventListener('click', closeDrawer);
+function closeDrawer() {
+  drawer.classList.remove('is-open');
+  drawerBg.classList.remove('is-open');
+}
+
+function renderDrawer() {
+  const body = $('#drawer-body');
+  body.innerHTML = `
+    <p class="muted" style="margin: 0 0 14px; font-size: 13px;">10 active builder profiles. Each plan trains the profile — defaults, plan quirks, framer tendencies, decision-maker.</p>
+    ${BUILDERS.map(b => `
+      <div class="builder-row">
+        <div>
+          <div class="nm">${escapeHtml(b.name)}</div>
+          <div class="meta">
+            ${escapeHtml(b.posture)} · ${escapeHtml(b.decisionMaker)}
+            ${b.architects.length ? ' · ' + b.architects.length + ' arch' : ''}
+            ${b.planQuirk ? ' · quirk noted' : ''}
+            ${b.isClientType ? ' · client-type profile' : ''}
+          </div>
+        </div>
+        <span class="tag">${escapeHtml(b.defaults.frame)}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
+// =============== INIT ===============
+updateCTA();
+
+</script>
+</body>
+</html>
