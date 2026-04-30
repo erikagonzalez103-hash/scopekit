@@ -798,7 +798,153 @@ a { color: var(--navy); }
   margin-top: 2px;
 }
 
-/* ===== Render preview ===== */
+/* ===== Walls confirm prompt (pony wall ambiguity) ===== */
+.walls-prompt {
+  background: rgba(184, 116, 43, 0.06);
+  border: 1px solid rgba(184, 116, 43, 0.3);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.walls-prompt-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.walls-prompt-h strong {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--ink);
+}
+.walls-prompt-body {
+  font-size: 13px;
+  color: var(--body);
+  margin-bottom: 10px;
+  line-height: 1.45;
+}
+.walls-prompt-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.walls-opt {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s var(--ease);
+}
+.walls-opt:hover { border-color: var(--navy); }
+.walls-opt input { margin-top: 2px; accent-color: var(--green); }
+.walls-opt input:checked ~ span { font-weight: 500; }
+.walls-opt:has(input:checked) { border-color: var(--green); background: var(--tint-green); }
+
+/* ===== Mirror calc card ===== */
+.mirror-card {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 16px;
+  position: relative;
+}
+.mirror-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 600px) {
+  .mirror-options { grid-template-columns: 1fr 1fr; }
+}
+.mirror-opt {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  padding: 14px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+  position: relative;
+}
+.mirror-opt:hover { border-color: var(--navy); }
+.mirror-opt.is-active {
+  border-color: var(--green);
+  background: var(--tint-green);
+  box-shadow: 0 0 0 1px var(--green) inset;
+}
+.mirror-opt-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.mirror-opt-h .ttl {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 17px;
+  color: var(--ink);
+}
+.mirror-opt-h .rec {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: var(--green);
+  color: white;
+  border-radius: 2px;
+}
+.mirror-opt .dims {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.mirror-opt .pos {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.mirror-opt-viz {
+  margin-top: 10px;
+  height: 56px;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+.mirror-opt-viz .wall-label {
+  position: absolute;
+  bottom: 2px; left: 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.mirror-opt-viz .m {
+  position: absolute;
+  top: 8px; bottom: 18px;
+  background: linear-gradient(135deg, rgba(36,50,77,0.15), rgba(36,50,77,0.05));
+  border: 1px solid var(--navy);
+}
+
+/* Glass height row */
+.glass-height-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 540px) { .glass-height-row { grid-template-columns: 1fr; } }
+
 .render-frame {
   aspect-ratio: 4/3;
   background: var(--bg);
@@ -1208,6 +1354,21 @@ const API_CONFIG = {
 };
 
 // =============== PRE-SEEDED BUILDER PROFILES ===============
+// Glass height options — shower enclosure glass panel heights (NOT ceiling height)
+const GLASS_HEIGHTS = ["6'-6\"", "7'-0\"", "7'-6\"", "8'-0\"", 'Custom'];
+// Mirror height options
+const MIRROR_HEIGHTS = ['40"', '42"', 'Custom'];
+// Pony-wall / shower wall configuration options
+const SHOWER_LAYOUTS = [
+  { id: 'inline-2', label: '2-panel inline · door + fixed over pony wall' },
+  { id: 'enclosure-3', label: '3-sided enclosure · door on open side' },
+  { id: 'corner', label: 'Corner · 2 walls, door on one open side' },
+  { id: 'neo', label: 'Neo-angle' },
+  { id: 'inline', label: 'Inline panel only · no door' },
+  { id: 'bypass', label: 'Bypass slider' },
+  { id: 'dual', label: 'Dual: framed + frameless options' },
+];
+
 const BUILDERS = [
   {
     id: 'hines',
@@ -1216,7 +1377,7 @@ const BUILDERS = [
     architects: ['Aubrey Architecture', 'Cole + Co'],
     billing: { contact: 'Megan', email: 'ap@hineshomes.com', format: 'PDF invoice' },
     minimum: null,
-    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear' },
+    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear', glassHeight: "7'-0\"", mirrorHeight: '42"' },
     posture: 'neutral',
     decisionMaker: 'builder-direct',
     planQuirk: 'Scale varies by page — verify per page on every plan',
@@ -1230,7 +1391,7 @@ const BUILDERS = [
     architects: ['Lingenfelter In-House'],
     billing: { contact: 'AP', email: 'accounting@lingenfelterluxuryhomes.com', format: 'PDF invoice' },
     minimum: null,
-    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Low-iron' },
+    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Low-iron', glassHeight: "8'-0\"", mirrorHeight: '42"' },
     posture: 'premium',
     decisionMaker: 'builder-relayed',
     planQuirk: 'Framers consistently run 1/4" wide — verify rough opening on site',
@@ -1243,7 +1404,7 @@ const BUILDERS = [
     architects: ['North Division'],
     billing: { contact: 'AP', email: 'billing@grandhomes.com', format: 'PDF invoice' },
     minimum: null,
-    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear' },
+    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear', glassHeight: "7'-0\"", mirrorHeight: '40"' },
     posture: 'cost',
     decisionMaker: 'builder-direct',
     notes: 'North Division contact.',
@@ -1254,7 +1415,7 @@ const BUILDERS = [
     address: '',
     architects: [],
     billing: {},
-    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear' },
+    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear', glassHeight: "7'-0\"", mirrorHeight: '42"' },
     posture: 'neutral',
     decisionMaker: 'builder-direct',
   },
@@ -1264,7 +1425,7 @@ const BUILDERS = [
     address: '',
     architects: [],
     billing: {},
-    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Matte black', treatment: 'Clear' },
+    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Matte black', treatment: 'Clear', glassHeight: "8'-0\"", mirrorHeight: '42"' },
     posture: 'premium',
     decisionMaker: 'builder-direct',
   },
@@ -1274,7 +1435,7 @@ const BUILDERS = [
     address: '',
     architects: [],
     billing: {},
-    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear' },
+    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear', glassHeight: "6'-6\"", mirrorHeight: '40"' },
     posture: 'cost',
     decisionMaker: 'builder-direct',
     notes: 'Production builder — value-engineered defaults.',
@@ -1285,7 +1446,7 @@ const BUILDERS = [
     address: '',
     architects: [],
     billing: {},
-    defaults: { frame: 'Frameless', glass: '1/2"', finish: 'Matte black', treatment: 'Low-iron' },
+    defaults: { frame: 'Frameless', glass: '1/2"', finish: 'Matte black', treatment: 'Low-iron', glassHeight: "7'-6\"", mirrorHeight: '42"' },
     posture: 'neutral',
     decisionMaker: 'builder-direct',
     notes: 'Formerly Shawn Harned.',
@@ -1296,7 +1457,7 @@ const BUILDERS = [
     address: '',
     architects: [],
     billing: {},
-    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear' },
+    defaults: { frame: 'Framed', glass: '3/8"', finish: 'Chrome', treatment: 'Clear', glassHeight: "7'-0\"", mirrorHeight: '40"' },
     posture: 'neutral',
     decisionMaker: 'builder-direct',
     notes: 'Catch-all for one-off commercial bids.',
@@ -1307,7 +1468,7 @@ const BUILDERS = [
     address: '',
     architects: [],
     billing: {},
-    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear' },
+    defaults: { frame: 'Frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear', glassHeight: "7'-0\"", mirrorHeight: '42"' },
     posture: 'neutral',
     decisionMaker: 'homeowner',
     isClientType: true,
@@ -1319,13 +1480,121 @@ const BUILDERS = [
     address: '',
     architects: [],
     billing: {},
-    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear' },
+    defaults: { frame: 'Semi-frameless', glass: '3/8"', finish: 'Brushed nickel', treatment: 'Clear', glassHeight: "7'-0\"", mirrorHeight: '40"' },
     posture: 'cost',
     decisionMaker: 'builder-direct',
     planQuirk: 'Plans note "SCALE: AS NOTED" — verify per page',
     notes: 'Reactivated under new ownership April 2026. Cost-conscious until learned otherwise.',
   },
 ];
+
+// =============== UNIT HELPERS ===============
+// Parse a feet-inches string to inches. Handles:
+//   "7'-3 1/2\"" → 87.5,  "7'-6\"" → 90,  "8'" → 96,
+//   "87.5\"" → 87.5,  "84" → 84,  "3 1/2\"" → 3.5
+function toInches(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim();
+  let total = 0;
+  // Feet
+  const feetM = s.match(/(\d+(?:\.\d+)?)\s*'/);
+  if (feetM) {
+    total += parseFloat(feetM[1]) * 12;
+    s = s.slice(feetM.index + feetM[0].length);
+  }
+  // Strip leading separator and trailing quote
+  s = s.replace(/^[-\s]+/, '').replace(/["″]$/, '').trim();
+  if (!s) return total || null;
+  // Mixed number: "3 1/2" or "3-1/2"
+  const mixed = s.match(/^(\d+)[-\s]+(\d+)\s*\/\s*(\d+)/);
+  if (mixed) {
+    total += parseFloat(mixed[1]) + parseFloat(mixed[2]) / parseFloat(mixed[3]);
+    return total;
+  }
+  // Pure fraction: "1/2"
+  const frac = s.match(/^(\d+)\s*\/\s*(\d+)/);
+  if (frac) {
+    total += parseFloat(frac[1]) / parseFloat(frac[2]);
+    return total;
+  }
+  // Decimal or integer: "87.5" or "87"
+  const dec = s.match(/^(\d+(?:\.\d+)?)/);
+  if (dec) {
+    total += parseFloat(dec[1]);
+    return total;
+  }
+  return total || null;
+}
+// Format inches back to feet-inches: 90 → "7'-6\"", 87.5 → "87 1/2\""
+function fromInches(n, asFeet=false) {
+  if (n == null || isNaN(n)) return '—';
+  if (asFeet) {
+    const f = Math.floor(n / 12);
+    const i = n - f * 12;
+    return i === 0 ? `${f}'-0"` : `${f}'-${formatFraction(i)}"`;
+  }
+  return `${formatFraction(n)}"`;
+}
+function formatFraction(n) {
+  const whole = Math.floor(n);
+  const frac = n - whole;
+  if (frac < 0.0625) return String(whole);
+  // Snap to nearest 1/16
+  const sixteenths = Math.round(frac * 16);
+  if (sixteenths === 16) return String(whole + 1);
+  // Reduce fraction
+  const fracStr = (() => {
+    const map = { 1: '1/16', 2: '1/8', 3: '3/16', 4: '1/4', 5: '5/16', 6: '3/8', 7: '7/16', 8: '1/2', 9: '9/16', 10: '5/8', 11: '11/16', 12: '3/4', 13: '13/16', 14: '7/8', 15: '15/16' };
+    return map[sixteenths] || String(sixteenths) + '/16';
+  })();
+  return whole > 0 ? `${whole} ${fracStr}` : fracStr;
+}
+
+// =============== MIRROR CALCULATOR ===============
+// Per Eridion rule: 3" margin on all "free" sides, centered over vanity, max-size within constraints.
+// Returns { options: [{ id, label, count, eachWidth, eachHeight, totalWidth, position, viable }] }
+function calcMirrorOptions(wallWidthIn, vanityCount, mirrorHeightIn) {
+  const W = wallWidthIn || 0;
+  const H = mirrorHeightIn || 40;
+  const MARGIN = 3;
+  const opts = [];
+
+  // Single-mirror option — only viable if wall < 9'-0" (108")
+  // Width = wall - 2*margin, centered on wall
+  if (W > 0 && W < 108) {
+    opts.push({
+      id: 'one',
+      label: '1 mirror',
+      count: 1,
+      eachWidth: W - 2 * MARGIN,
+      eachHeight: H,
+      position: 'Centered on wall · 3" each side · 3" above backsplash',
+      viable: true,
+    });
+  }
+
+  // Two-mirror option — for any double vanity OR any wall ≥ 60"
+  // Each mirror = (W - 4*margin) / 2, centered over each sink (assumed symmetric)
+  if (W >= 60 && vanityCount >= 1) {
+    const each = (W - 4 * MARGIN) / 2;
+    if (each >= 18) {
+      opts.push({
+        id: 'two',
+        label: '2 mirrors',
+        count: 2,
+        eachWidth: each,
+        eachHeight: H,
+        position: 'Centered over each sink · 3" outer + 3" between · 3" above backsplash',
+        viable: true,
+      });
+    }
+  }
+
+  // Above 9'-0" wall: single is impractical, default to two
+  // Below 9'-0": both shown, default depends on vanity count
+  return { options: opts, recommendedId: vanityCount >= 2 ? 'two' : (W < 108 ? 'one' : 'two') };
+}
 
 const SKETCH_OPTIONS = [
   { id: 'alcove',     label: 'Alcove',         svg: '<rect x="8" y="8" width="44" height="44" fill="none" stroke="#24324D" stroke-width="2"/><line x1="8" y1="20" x2="52" y2="20" stroke="#53964F" stroke-width="2"/>' },
@@ -1362,6 +1631,7 @@ const state = {
 
   // Per-shower configs
   showerConfigs: {}, // by bathroom id
+  mirrorConfigs: {}, // by bathroom id
 
   // Loading flags
   extracting: false,
@@ -1574,6 +1844,7 @@ function resetJob() {
     otherItems: [],
     scaleStatus: null,
     showerConfigs: {},
+    mirrorConfigs: {},
     extracting: false,
   });
   // Reset DOM
@@ -1699,8 +1970,9 @@ function mockExtraction() {
           type: { value: 'Walk-in', conf: 'high', mode: 'auto' },
           dims: { value: state.hoDims || '60" wide × 36" deep', conf: 'low', mode: 'auto' },
           features: [],
+          walls: { layout: null, conf: 'low', mode: 'auto', ambiguous: true, hint: 'Confirm on site — pony wall vs. full enclosure' },
         },
-        vanity: { count: 1, dims: { value: 'TBD on site', conf: 'low', mode: 'auto' } },
+        vanity: { count: 1, dims: { value: 'TBD on site', conf: 'low', mode: 'auto' }, wallWidth: { value: null, conf: 'low', mode: 'auto' } },
         mirror: { value: 'TBD', conf: 'low', mode: 'auto' },
         flags: [{ kind: 'attn', text: 'Site visit required — primary dimension source' }],
       }],
@@ -1709,6 +1981,7 @@ function mockExtraction() {
     };
   }
   // Builder mock — synthesizes a plausible 2-bath plan
+  // Master shower mirrors Erika's example plan: 72×42 shower, pony wall not explicitly drawn
   return {
     bathrooms: [
       {
@@ -1719,18 +1992,33 @@ function mockExtraction() {
           type: { value: 'Curbless walk-in', conf: 'high', mode: 'auto' },
           dims: { value: '72" × 42"', conf: 'high', mode: 'auto' },
           features: ['Linear drain', 'Niche 24×14', 'Bench 18×60'],
+          walls: {
+            layout: null,
+            conf: 'low',
+            mode: 'auto',
+            ambiguous: true,
+            hint: 'Plan shows 4\'-0" opening at top. Showerhead on right wall (full-height). Top wall could be pony wall — not labeled.',
+          },
         },
-        vanity: { count: 2, dims: { value: '72" × 22" each', conf: 'med', mode: 'auto' } },
-        mirror: { value: '36" × 42" framed', conf: 'med', mode: 'auto' },
+        vanity: {
+          count: 2,
+          dims: { value: '40" × 22" each', conf: 'med', mode: 'auto' },
+          wallWidth: { value: '7\'-3 1/2"', conf: 'high', mode: 'auto' },
+        },
+        mirror: { value: 'Calculated below', conf: 'med', mode: 'auto' },
         flags: [],
       },
       {
         id: 'bath-2',
         name: 'Powder bath',
         ceiling: { value: '9\'-0"', conf: 'high', mode: 'auto' },
-        shower: { type: { value: '— none —', conf: 'high', mode: 'auto' }, dims: { value: '—', conf: 'high', mode: 'auto' }, features: [] },
-        vanity: { count: 1, dims: { value: '36" × 20"', conf: 'high', mode: 'auto' } },
-        mirror: { value: '24" × 30"', conf: 'low', mode: 'auto' },
+        shower: { type: { value: '— none —', conf: 'high', mode: 'auto' }, dims: { value: '—', conf: 'high', mode: 'auto' }, features: [], walls: null },
+        vanity: {
+          count: 1,
+          dims: { value: '36" × 20"', conf: 'high', mode: 'auto' },
+          wallWidth: { value: '4\'-6"', conf: 'med', mode: 'auto' },
+        },
+        mirror: { value: 'Calculated below', conf: 'med', mode: 'auto' },
         flags: [],
       },
     ],
@@ -1802,8 +2090,13 @@ function foldCommItems(items) {
           id: 'bath-comm-' + Math.random().toString(36).slice(2,7),
           name: placeholderName,
           ceiling: { value: 'TBD', conf: 'low', mode: 'auto' },
-          shower: { type: { value: 'TBD', conf: 'low', mode: 'auto' }, dims: { value: 'TBD', conf: 'low', mode: 'auto' }, features: [] },
-          vanity: { count: 1, dims: { value: 'TBD', conf: 'low', mode: 'auto' } },
+          shower: {
+            type: { value: 'TBD', conf: 'low', mode: 'auto' },
+            dims: { value: 'TBD', conf: 'low', mode: 'auto' },
+            features: [],
+            walls: { layout: null, conf: 'low', mode: 'auto', ambiguous: true, hint: 'No plan reference — confirm walls on site' },
+          },
+          vanity: { count: 1, dims: { value: 'TBD', conf: 'low', mode: 'auto' }, wallWidth: { value: null, conf: 'low', mode: 'auto' } },
           mirror: { value: 'TBD', conf: 'low', mode: 'auto' },
           flags: [],
           fromComm: true,
@@ -1889,6 +2182,9 @@ function renderBathCard(bath) {
   const flagHtml = (bath.flags || []).map(f =>
     `<span class="flag ${f.kind === 'attn' ? 'attn' : ''}">${escapeHtml(f.text)}</span>`).join('');
 
+  const hasShower = bath.shower?.type?.value && !/none|tbd|—/i.test(bath.shower.type.value);
+  const wallsAmbiguous = hasShower && bath.shower?.walls?.ambiguous;
+
   c.innerHTML = `
     <div class="bath-h">
       <div>
@@ -1896,14 +2192,31 @@ function renderBathCard(bath) {
         <div class="sub">${bath.fromComm ? 'Created from communication' : 'From plan extraction'}</div>
       </div>
       <div class="row-tight">
-        <span class="conf ${bath.shower?.dims?.conf || 'med'}">${(bath.shower?.dims?.conf || 'med').toUpperCase()} · shower dims</span>
+        ${hasShower ? `<span class="conf ${bath.shower?.dims?.conf || 'med'}">${(bath.shower?.dims?.conf || 'med').toUpperCase()} · shower dims</span>` : ''}
       </div>
     </div>
     <div class="bath-body">
       ${flagHtml ? `<div style="margin-bottom: 10px;">${flagHtml}</div>` : ''}
+      ${wallsAmbiguous ? `
+        <div class="walls-prompt" data-bath="${escapeHtml(bath.id)}">
+          <div class="walls-prompt-h">
+            <span class="conf low">LOW · WALLS</span>
+            <strong>Confirm shower wall configuration</strong>
+          </div>
+          <div class="walls-prompt-body">${escapeHtml(bath.shower.walls.hint || '')}</div>
+          <div class="walls-prompt-opts">
+            ${SHOWER_LAYOUTS.map(l => `
+              <label class="walls-opt">
+                <input type="radio" name="walls-${escapeHtml(bath.id)}" value="${escapeHtml(l.id)}" ${bath.shower.walls.layout === l.id ? 'checked' : ''} />
+                <span>${escapeHtml(l.label)}</span>
+              </label>`).join('')}
+          </div>
+        </div>` : ''}
       ${bathField('Ceiling height', bath.ceiling, 'ceiling')}
-      ${bathField('Shower type', bath.shower?.type, 'shower.type')}
-      ${bathField('Shower dims', bath.shower?.dims, 'shower.dims', true)}
+      ${hasShower ? `
+        ${bathField('Shower type', bath.shower?.type, 'shower.type')}
+        ${bathField('Shower dims', bath.shower?.dims, 'shower.dims', true)}
+      ` : ''}
       ${bath.shower?.features?.length ? `
         <div class="bathfield">
           <div class="bathfield-lbl">Features</div>
@@ -1912,6 +2225,7 @@ function renderBathCard(bath) {
         </div>` : ''}
       ${bathField('Vanity count', { value: String(bath.vanity?.count ?? 0), conf: 'high', mode: 'auto' }, 'vanity.count', false, true)}
       ${bathField('Vanity dims', bath.vanity?.dims, 'vanity.dims', true)}
+      ${bathField('Vanity wall width', bath.vanity?.wallWidth || { value: '—', conf: 'low', mode: 'auto' }, 'vanity.wallWidth', true)}
       ${bathField('Mirror', bath.mirror, 'mirror')}
     </div>
   `;
@@ -1939,6 +2253,23 @@ function renderBathCard(bath) {
           target.mode = 'auto';
         }
       }
+    });
+  });
+  // Wire walls radio
+  c.querySelectorAll(`input[name="walls-${bath.id}"]`).forEach(r => {
+    r.addEventListener('change', () => {
+      bath.shower.walls.layout = r.value;
+      bath.shower.walls.conf = 'high';
+      bath.shower.walls.mode = 'manual';
+      bath.shower.walls.ambiguous = false;
+      // Update prompt header chip
+      const hdr = c.querySelector('.walls-prompt-h .conf');
+      if (hdr) {
+        hdr.classList.remove('low'); hdr.classList.add('high');
+        hdr.textContent = 'HIGH · MANUAL';
+      }
+      const head = c.querySelector('.walls-prompt-h strong');
+      if (head) head.textContent = 'Wall configuration confirmed';
     });
   });
   // Wire confidence badges → click cycles HIGH/MED/LOW (manual mode)
@@ -1988,26 +2319,56 @@ function bathField(label, valObj, path, isDim=false, scalarLeaf=false) {
 function renderConfigure() {
   const wrap = $('#configure-cards');
   wrap.innerHTML = '';
-  const showers = state.bathrooms.filter(b => b.shower?.type?.value && !/none|tbd|—/i.test(b.shower.type.value));
-  if (!showers.length) {
-    wrap.innerHTML = '<div class="card"><p class="muted" style="margin:0;">No shower enclosures detected to configure. Add via the review step or proceed to output for non-shower glass items.</p></div>';
-    return;
-  }
   const builderDef = BUILDERS.find(b => b.id === state.builder)?.defaults || {};
-  showers.forEach(s => {
-    if (!state.showerConfigs[s.id]) {
-      state.showerConfigs[s.id] = {
-        config: s._dualFrame ? 'Dual: framed + frameless' : 'Auto · alcove',
-        frame: builderDef.frame || 'Frameless',
-        finish: builderDef.finish || 'Brushed nickel',
-        glass: builderDef.glass || '3/8"',
-        treatment: builderDef.treatment || 'Clear',
-        rendered: false,
-      };
+
+  // For each bathroom: render shower config (if shower) + mirror config (if vanity)
+  state.bathrooms.forEach(bath => {
+    const hasShower = bath.shower?.type?.value && !/none|tbd|—/i.test(bath.shower.type.value);
+    const hasVanity = (bath.vanity?.count || 0) > 0;
+
+    if (hasShower) {
+      // Init shower config from review-step layout pick if user chose one there
+      if (!state.showerConfigs[bath.id]) {
+        const layoutLabel = bath.shower?.walls?.layout
+          ? (SHOWER_LAYOUTS.find(l => l.id === bath.shower.walls.layout)?.label || 'Auto · alcove')
+          : 'Auto · alcove';
+        state.showerConfigs[bath.id] = {
+          config: bath._dualFrame ? 'Dual: framed + frameless' : layoutLabel,
+          frame: builderDef.frame || 'Frameless',
+          finish: builderDef.finish || 'Brushed nickel',
+          glass: builderDef.glass || '3/8"',
+          treatment: builderDef.treatment || 'Clear',
+          glassHeight: builderDef.glassHeight || "7'-0\"",
+          customGlassHeight: '',
+          rendered: false,
+        };
+      }
+      wrap.appendChild(renderConfigCard(bath));
     }
-    wrap.appendChild(renderConfigCard(s));
+
+    if (hasVanity) {
+      // Init mirror config
+      if (!state.mirrorConfigs) state.mirrorConfigs = {};
+      if (!state.mirrorConfigs[bath.id]) {
+        const wallW = toInches(bath.vanity?.wallWidth?.value);
+        const dfltH = toInches((builderDef.mirrorHeight || '40"').replace('"',''));
+        const calc = calcMirrorOptions(wallW, bath.vanity?.count || 1, dfltH);
+        state.mirrorConfigs[bath.id] = {
+          mirrorHeight: builderDef.mirrorHeight || '40"',
+          customMirrorHeight: '',
+          selectedOption: calc.recommendedId,
+          recommendedId: calc.recommendedId,
+        };
+      }
+      wrap.appendChild(renderMirrorCard(bath));
+    }
   });
+
+  if (!wrap.children.length) {
+    wrap.innerHTML = '<div class="card"><p class="muted" style="margin:0;">No glass items to configure. Proceed to output.</p></div>';
+  }
 }
+
 function renderConfigCard(bath) {
   const cfg = state.showerConfigs[bath.id];
   const c = el('div', 'card marked');
@@ -2018,20 +2379,29 @@ function renderConfigCard(bath) {
     </div>
     <div class="grid grid-2">
       <div>
-        <div class="field"><label class="field-lbl">Configuration</label>
+        <div class="field"><label class="field-lbl">Wall configuration</label>
           <select class="field-select" data-cfg="config">
-            <option>Auto · alcove</option><option>Neo-angle</option><option>Corner</option><option>Inline panel</option><option>Bypass slider</option><option>Dual: framed + frameless</option>
+            ${SHOWER_LAYOUTS.map(l => `<option value="${escapeHtml(l.label)}" ${cfg.config === l.label ? 'selected' : ''}>${escapeHtml(l.label)}</option>`).join('')}
+            <option value="Auto · alcove" ${cfg.config === 'Auto · alcove' ? 'selected' : ''}>Auto · alcove</option>
           </select></div>
         <div class="field" style="margin-top:10px;"><label class="field-lbl">Frame style</label>
           <select class="field-select" data-cfg="frame"><option>Frameless</option><option>Semi-frameless</option><option>Framed</option></select></div>
         <div class="field" style="margin-top:10px;"><label class="field-lbl">Hardware finish</label>
           <select class="field-select" data-cfg="finish"><option>Brushed nickel</option><option>Chrome</option><option>Matte black</option><option>Champagne bronze</option><option>Polished brass</option></select></div>
-        <div class="field" style="margin-top:10px;"><label class="field-lbl">Glass thickness · treatment</label>
-          <div class="row" style="gap:8px;">
-            <select class="field-select" data-cfg="glass" style="flex:1;"><option>3/8"</option><option>1/2"</option></select>
-            <select class="field-select" data-cfg="treatment" style="flex:1;"><option>Clear</option><option>Low-iron</option><option>Textured</option></select>
-          </div>
+        <div class="glass-height-row" style="margin-top:10px;">
+          <div class="field"><label class="field-lbl">Glass height</label>
+            <select class="field-select" data-cfg="glassHeight">
+              ${GLASS_HEIGHTS.map(h => `<option ${cfg.glassHeight === h ? 'selected' : ''}>${escapeHtml(h)}</option>`).join('')}
+            </select></div>
+          <div class="field"><label class="field-lbl">Glass thickness</label>
+            <select class="field-select" data-cfg="glass"><option>3/8"</option><option>1/2"</option></select></div>
         </div>
+        ${cfg.glassHeight === 'Custom' ? `
+          <div class="field" style="margin-top:10px;"><label class="field-lbl">Custom glass height</label>
+            <input class="field-input" type="text" data-cfg="customGlassHeight" placeholder='e.g. 7&apos;-3"' value="${escapeHtml(cfg.customGlassHeight || '')}" /></div>
+        ` : ''}
+        <div class="field" style="margin-top:10px;"><label class="field-lbl">Glass treatment</label>
+          <select class="field-select" data-cfg="treatment"><option>Clear</option><option>Low-iron</option><option>Textured</option></select></div>
       </div>
       <div>
         <div class="render-frame">
@@ -2044,15 +2414,113 @@ function renderConfigCard(bath) {
   `;
   // Wire selects
   c.querySelectorAll('select[data-cfg]').forEach(sel => {
-    sel.value = cfg[sel.dataset.cfg] || sel.options[0].value;
+    // Sync DOM to state on each render (state is source of truth)
+    if (cfg[sel.dataset.cfg] != null) sel.value = cfg[sel.dataset.cfg];
     sel.addEventListener('change', () => {
       cfg[sel.dataset.cfg] = sel.value;
+      // Re-render if glass height changed (to show/hide custom input)
+      if (sel.dataset.cfg === 'glassHeight') renderConfigure();
     });
+  });
+  c.querySelectorAll('input[data-cfg]').forEach(inp => {
+    inp.addEventListener('input', () => { cfg[inp.dataset.cfg] = inp.value; });
   });
   c.querySelector('[data-render]').addEventListener('click', () => {
     cfg.rendered = true;
     renderConfigure();
   });
+  return c;
+}
+
+function renderMirrorCard(bath) {
+  const mc = state.mirrorConfigs[bath.id];
+  const c = el('div', 'mirror-card marked');
+
+  // Resolve mirror height (use custom if set)
+  const resolvedHeightStr = mc.mirrorHeight === 'Custom' ? (mc.customMirrorHeight || '40"') : mc.mirrorHeight;
+  const heightIn = toInches(resolvedHeightStr.replace('"','')) || 40;
+
+  const wallW = toInches(bath.vanity?.wallWidth?.value);
+  const wallWStr = wallW ? fromInches(wallW, true) : '—';
+  const calc = calcMirrorOptions(wallW, bath.vanity?.count || 1, heightIn);
+
+  c.innerHTML = `
+    <div class="card-h">
+      <h3 class="card-title">${escapeHtml(bath.name)} · vanity mirror${(bath.vanity?.count || 0) > 1 ? 's' : ''}</h3>
+      <span class="card-meta">Wall ${escapeHtml(wallWStr)} · ${bath.vanity?.count || 1} sink${(bath.vanity?.count || 1) > 1 ? 's' : ''}</span>
+    </div>
+    <div class="grid grid-2" style="margin-top: 6px;">
+      <div class="field">
+        <label class="field-lbl">Mirror height</label>
+        <select class="field-select" data-mh>
+          ${MIRROR_HEIGHTS.map(h => `<option ${mc.mirrorHeight === h ? 'selected' : ''}>${escapeHtml(h)}</option>`).join('')}
+        </select>
+      </div>
+      ${mc.mirrorHeight === 'Custom' ? `
+        <div class="field">
+          <label class="field-lbl">Custom height</label>
+          <input class="field-input" type="text" data-mhc placeholder='e.g. 36"' value="${escapeHtml(mc.customMirrorHeight || '')}" />
+        </div>
+      ` : '<div></div>'}
+    </div>
+    ${!wallW ? `
+      <div style="margin-top: 12px; padding: 10px 12px; background: rgba(184,116,43,0.08); border: 1px solid rgba(184,116,43,0.3); border-radius: 4px; font-size: 13px; color: var(--warning);">
+        Vanity wall width missing. Fill it in on the review step or measure on site.
+      </div>` : ''}
+    ${calc.options.length ? `
+      <div class="mirror-options">
+        ${calc.options.map(o => {
+          const isActive = mc.selectedOption === o.id;
+          const isRec = calc.recommendedId === o.id;
+          // Build a tiny visualizer
+          const wallPct = 100;
+          const margins = (() => {
+            if (!wallW) return [];
+            if (o.count === 1) {
+              return [{ leftPct: 3 / wallW * 100, widthPct: o.eachWidth / wallW * 100 }];
+            }
+            // Two: 3 + W + 3 + 3 + W + 3
+            return [
+              { leftPct: 3 / wallW * 100, widthPct: o.eachWidth / wallW * 100 },
+              { leftPct: (3 + o.eachWidth + 6) / wallW * 100, widthPct: o.eachWidth / wallW * 100 },
+            ];
+          })();
+          return `
+            <div class="mirror-opt ${isActive ? 'is-active' : ''}" data-opt="${escapeHtml(o.id)}">
+              <div class="mirror-opt-h">
+                <div class="ttl">${escapeHtml(o.label)}</div>
+                ${isRec ? '<span class="rec">Recommended</span>' : ''}
+              </div>
+              <div class="dims">${o.count} × ${formatFraction(o.eachWidth)}" W × ${formatFraction(o.eachHeight)}" H</div>
+              <div class="pos">${escapeHtml(o.position)}</div>
+              <div class="mirror-opt-viz">
+                ${margins.map(m => `<div class="m" style="left:${m.leftPct}%;width:${m.widthPct}%"></div>`).join('')}
+                <div class="wall-label">wall ${escapeHtml(wallWStr)}</div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+      <div class="muted" style="margin-top: 12px; font-size: 12px;">
+        Both options will appear on the proposal. Selected = primary recommendation in SG entry.
+      </div>
+    ` : ''}
+  `;
+
+  // Wire mirror height
+  c.querySelector('[data-mh]')?.addEventListener('change', e => {
+    mc.mirrorHeight = e.target.value;
+    renderConfigure();
+  });
+  c.querySelector('[data-mhc]')?.addEventListener('input', e => {
+    mc.customMirrorHeight = e.target.value;
+  });
+  c.querySelectorAll('[data-opt]').forEach(opt => {
+    opt.addEventListener('click', () => {
+      mc.selectedOption = opt.dataset.opt;
+      renderConfigure();
+    });
+  });
+
   return c;
 }
 
@@ -2078,24 +2546,56 @@ function renderOutput() {
       <div class="divider"></div>
       ${showers.map(s => {
         const cfg = state.showerConfigs[s.id] || {};
+        const layoutLabel = (SHOWER_LAYOUTS.find(l => l.label === cfg.config)?.label) || cfg.config || '—';
+        const ghDisplay = cfg.glassHeight === 'Custom' ? (cfg.customGlassHeight || '—') : (cfg.glassHeight || '—');
         return `
         <div style="margin-bottom: 18px;">
           <div class="field-lbl" style="color: var(--ink); font-weight: 600;">${escapeHtml(s.name)} — shower enclosure</div>
           <div style="margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--green);">
             <div class="mono" style="font-size: 13px;">${escapeHtml(s.shower?.dims?.value || '')} · ${escapeHtml(s.shower?.type?.value || '')}</div>
             <div style="font-size: 13px; margin-top: 4px;">
+              ${escapeHtml(layoutLabel)}
+            </div>
+            <div style="font-size: 13px; margin-top: 4px;">
               ${escapeHtml(cfg.frame || '—')} · ${escapeHtml(cfg.glass || '')} ${escapeHtml((cfg.treatment || '').toLowerCase())} · ${escapeHtml(cfg.finish || '')}
+            </div>
+            <div style="font-size: 13px; margin-top: 4px;">
+              <span class="mono" style="font-size: 11px; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase;">Glass height</span>
+              <strong>${escapeHtml(ghDisplay)}</strong>
             </div>
             ${s.shower?.features?.length ? `<div class="mono" style="font-size: 11px; margin-top: 4px; color: var(--muted); letter-spacing: 0.06em;">+ ${s.shower.features.map(escapeHtml).join(' · ')}</div>` : ''}
           </div>
         </div>`;
       }).join('')}
-      ${state.bathrooms.filter(x => x.mirror?.value && x.mirror.value !== 'TBD' && x.mirror.value !== '—').map(x => `
+      ${state.bathrooms.filter(x => (x.vanity?.count || 0) > 0).map(x => {
+        const mc = state.mirrorConfigs?.[x.id];
+        if (!mc) return '';
+        const wallW = toInches(x.vanity?.wallWidth?.value);
+        if (!wallW) {
+          return `
+          <div style="margin-bottom: 12px;">
+            <div class="field-lbl" style="color: var(--ink); font-weight: 600;">${escapeHtml(x.name)} — mirror</div>
+            <div style="padding-left: 12px; border-left: 2px solid var(--warning); font-size: 13px; margin-top: 4px; color: var(--warning);">
+              Wall width missing — confirm on site before pricing
+            </div>
+          </div>`;
+        }
+        const heightStr = mc.mirrorHeight === 'Custom' ? (mc.customMirrorHeight || '40"') : mc.mirrorHeight;
+        const heightIn = toInches(heightStr.replace('"','')) || 40;
+        const calc = calcMirrorOptions(wallW, x.vanity?.count || 1, heightIn);
+        const sel = calc.options.find(o => o.id === mc.selectedOption) || calc.options[0];
+        if (!sel) return '';
+        const alt = calc.options.find(o => o.id !== sel.id);
+        return `
         <div style="margin-bottom: 12px;">
-          <div class="field-lbl" style="color: var(--ink); font-weight: 600;">${escapeHtml(x.name)} — mirror</div>
-          <div style="padding-left: 12px; border-left: 2px solid var(--navy); font-size: 13px; margin-top: 4px;">${escapeHtml(x.mirror.value)}</div>
-        </div>
-      `).join('')}
+          <div class="field-lbl" style="color: var(--ink); font-weight: 600;">${escapeHtml(x.name)} — vanity mirror${sel.count > 1 ? 's' : ''}</div>
+          <div style="padding-left: 12px; border-left: 2px solid var(--navy); font-size: 13px; margin-top: 4px;">
+            <div class="mono" style="font-weight: 500;">${sel.count} × ${formatFraction(sel.eachWidth)}" W × ${formatFraction(sel.eachHeight)}" H</div>
+            <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">${escapeHtml(sel.position)}</div>
+            ${alt ? `<div style="font-size: 12px; margin-top: 4px;"><span class="mono" style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);">Alternate</span> · ${alt.count} × ${formatFraction(alt.eachWidth)}" × ${formatFraction(alt.eachHeight)}"</div>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
       <div class="divider"></div>
       <div style="font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase;">
         Pricing posture: ${escapeHtml(state.posture)} · decision-maker: ${escapeHtml(state.decisionMaker)}
