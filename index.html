@@ -945,6 +945,236 @@ a { color: var(--navy); }
 }
 @media (max-width: 540px) { .glass-height-row { grid-template-columns: 1fr; } }
 
+/* ===== Flags banner (Review step) ===== */
+#flags-banner { margin-bottom: 22px; }
+#flags-banner.has-flags {
+  background: rgba(184, 116, 43, 0.05);
+  border: 1px solid rgba(184, 116, 43, 0.25);
+  border-radius: var(--r-md);
+  padding: 14px 16px 10px;
+}
+.flags-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.flags-h h3 {
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.flags-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--warning);
+  color: white;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flags-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-left: auto;
+}
+.flags-list { display: flex; flex-direction: column; gap: 8px; }
+.flag-row {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+}
+.flag-row.is-noted { background: rgba(83, 150, 79, 0.12); border-color: rgba(83, 150, 79, 0.4); }
+.flag-row.is-ask { background: rgba(184, 116, 43, 0.12); border-color: rgba(184, 116, 43, 0.5); }
+.flag-row.is-noted .flag-decision { color: var(--green-dark); }
+.flag-row.is-ask .flag-decision { color: var(--warning); }
+
+/* ===== Flag decisions roll-up (Output step) ===== */
+.flags-output-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.output-card {
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  border: 1px solid var(--hairline);
+}
+.output-card-ask {
+  background: rgba(184, 116, 43, 0.08);
+  border-color: rgba(184, 116, 43, 0.45);
+}
+.output-card-noted {
+  background: rgba(83, 150, 79, 0.08);
+  border-color: rgba(83, 150, 79, 0.4);
+}
+.output-card-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed currentColor;
+  border-bottom-color: var(--hairline);
+}
+.output-card-h h3 {
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.output-card-ask .output-card-h h3 { color: var(--warning); }
+.output-card-noted .output-card-h h3 { color: var(--green-dark); }
+.output-card-mark {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+.output-card-ask .output-card-mark { background: var(--warning); }
+.output-card-noted .output-card-mark { background: var(--green); }
+.output-card-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-left: auto;
+}
+.output-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.output-card-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+.output-card-list li:last-child { border-bottom: none; padding-bottom: 0; }
+.output-card-bath {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.output-card-msg {
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.45;
+}
+.output-card-sugg {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 3px;
+  font-style: italic;
+}
+.flag-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.flag-sev {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.flag-sev.sev-info { background: var(--navy); }
+.flag-sev.sev-warn { background: var(--warning); }
+.flag-sev.sev-block { background: #B83C3C; }
+.flag-bath {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  font-weight: 600;
+}
+.flag-cat {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.flag-body { min-width: 0; }
+.flag-msg {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.4;
+  font-weight: 500;
+}
+.flag-sugg {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 3px;
+  font-style: italic;
+}
+.flag-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.flag-action {
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  color: var(--body);
+  padding: 5px 9px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: all 0.15s var(--ease);
+}
+.flag-action:hover { background: var(--paper); border-color: var(--ink); }
+.flag-action.accept:hover { color: var(--muted); }
+.flag-action.note:hover { background: rgba(83,150,79,0.08); border-color: var(--green); color: var(--green-dark); }
+.flag-action.ask:hover { background: rgba(184,116,43,0.08); border-color: var(--warning); color: var(--warning); }
+.flag-decision {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
 .render-frame {
   aspect-ratio: 4/3;
   background: var(--paper);
@@ -1186,23 +1416,129 @@ a { color: var(--navy); }
 
 /* ===== Output screen drop-zone ===== */
 .sg-mirror {
-  background: repeating-linear-gradient(0deg,
-    var(--paper) 0, var(--paper) 38px,
-    var(--bg) 38px, var(--bg) 39px
-  );
-  border: 1px dashed var(--hairline-strong);
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
   border-radius: var(--r-md);
   padding: 18px;
   position: relative;
 }
-.sg-mirror::after {
-  content: 'DROP-IN ZONE — SG SCREENSHOTS PENDING';
-  position: absolute;
-  top: 8px; right: 12px;
+
+/* ===== SG job tree (parent + nested children, mirrors SG quote structure) ===== */
+.sg-tree {
+  border-top: 2px solid var(--ink);
+  padding-top: 12px;
+}
+.sg-tree:first-child { border-top: none; padding-top: 0; }
+.sg-tree-bath {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.sg-tree-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline-strong);
+  margin-bottom: 6px;
+}
+.sg-tree-title {
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+.sg-tree-qty .qty-x {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--tint-navy);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+.sg-tree-children {
+  display: flex;
+  flex-direction: column;
+}
+.sg-tree-row {
+  padding: 7px 0 7px 4px;
+  border-bottom: 1px dotted var(--hairline);
+}
+.sg-tree-row:last-child { border-bottom: none; }
+.sg-tree-row.glass { padding-bottom: 9px; }
+.sg-tree-row.pending { color: var(--warning); }
+.sg-tree-line {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 13px;
+}
+.sg-tree-bullet {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink);
+  opacity: 0.55;
+  margin-top: 6px;
+  margin-left: 4px;
+}
+.sg-tree-label { color: var(--ink); font-weight: 500; }
+.sg-tree-size {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.sg-tree-role {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sg-tree-qty-inline {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 22px;
+  text-align: right;
+}
+.sg-tree-detail {
+  margin-left: 26px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+.sg-tree-detail.pending {
   color: var(--warning);
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sg-tree-cutouts {
+  margin-left: 26px;
+  margin-top: 3px;
+}
+.sg-tree-cutout {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--body);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
 }
 
 /* Helpers */
@@ -1432,6 +1768,8 @@ a { color: var(--navy); }
     <h1 class="h-display">Review what we pulled.</h1>
     <p class="h-sub">One card per bathroom and per other glass item. Each correction trains the builder profile. Confidence recalculates on edit, or set it manually.</p>
 
+    <div id="flags-banner"></div>
+
     <div id="review-cards" class="stack-lg"></div>
 
     <div class="divider"></div>
@@ -1489,6 +1827,8 @@ a { color: var(--navy); }
 
     <h1 class="h-display">Visual scope reference.</h1>
     <p class="h-sub">Mirrors Smart Glazier quote entry layout. Glance back and forth as you type into SG.</p>
+
+    <div id="flags-output"></div>
 
     <div class="grid grid-2 stack-lg" style="align-items: start;">
       <div>
@@ -1660,6 +2000,378 @@ const RENDER_PROFILES = {
     notes: 'No PT photos available — use DR Horton refs as same-tier anchors',
   },
 };
+
+// =============== FLAG RULES (senior-glazier-looking-over-your-shoulder system) ===============
+// Each rule runs against (bath, builder, state) during the Review step. Rules return a flag
+// instance object or null. Three severities (info/warn/block) and four categories (sanity,
+// config, completeness, builder-quirk). Each fired flag shows three actions:
+//   - accept: dismiss, no carry-forward
+//   - note:   add to proposal "Notes for customer" section
+//   - ask:    park as "needs answer before quoting" — surfaces in Output step prominently
+//
+// To add a new rule, append to FLAG_RULES. Each rule is a pure function.
+// State of decisions lives in state.flagDecisions, keyed `${bathId}:${flagId}`.
+
+// Helper: pull the shower-width inches from "72\" × 42\""
+function parseShowerWidth(bath) {
+  const v = String(bath?.shower?.dims?.value || '');
+  const m = v.match(/(\d+(?:\.\d+)?)\s*["']?\s*[×x]\s*(\d+(?:\.\d+)?)/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// Helper: parse a pony-wall length from a features list. Looks for "X'-Y\" pony" or "N\" pony" or "pony X'-Y\"".
+// Returns inches, or null if not parseable. Conservative: only fires when a recognizable pattern matches.
+function parsePonyLength(bath) {
+  const features = bath?.shower?.features || [];
+  for (const f of features) {
+    const s = String(f);
+    if (!/pony/i.test(s)) continue;
+    // Try patterns: "4'-0" pony", "Pony wall 4'-0"", "48" pony" (length-only when single number)
+    let m = s.match(/(\d+)\s*'\s*-?\s*(\d+)?\s*["']?\s*(?:long\s+)?pony/i);
+    if (m) return parseInt(m[1]) * 12 + (m[2] ? parseInt(m[2]) : 0);
+    m = s.match(/pony\s+(?:wall\s+)?(\d+)\s*'\s*-?\s*(\d+)?\s*["']?/i);
+    if (m) return parseInt(m[1]) * 12 + (m[2] ? parseInt(m[2]) : 0);
+    m = s.match(/pony\s+wall\s+length\s*[:=]?\s*(\d+)/i);
+    if (m) return parseInt(m[1]);
+  }
+  return null;
+}
+
+// Helper: pony-wall HEIGHT — different field, same parsing approach
+function parsePonyHeight(bath) {
+  const features = bath?.shower?.features || [];
+  for (const f of features) {
+    const s = String(f);
+    if (!/pony/i.test(s)) continue;
+    // "48" tall", "48-tall pony", "pony X" tall"
+    let m = s.match(/(\d+)\s*["']?\s*tall/i);
+    if (m) return parseInt(m[1]);
+  }
+  return null;
+}
+
+const FLAG_RULES = [
+  // ===== Dimensional sanity =====
+  {
+    id: 'narrow-door',
+    category: 'sanity',
+    severity: 'warn',
+    test: (bath, builder, state) => {
+      if (bath?.shower?.walls?.layout !== 'inline-2') return null;
+      const showerW = parseShowerWidth(bath);
+      const ponyLen = parsePonyLength(bath);
+      if (!showerW || !ponyLen) return null;
+      const door = showerW - ponyLen;
+      if (door < 26 && door > 0) {
+        return {
+          message: `Door opening computes to ${door}" — narrow for a master shower (typical 26"–30").`,
+          suggestion: door < 24
+            ? `Confirm with customer. Most homeowners notice doors below 24" feel cramped.`
+            : `Workable but worth confirming with the customer, or widening at framing if tile isn't down yet.`,
+        };
+      }
+      return null;
+    },
+  },
+  {
+    id: 'wide-door',
+    category: 'sanity',
+    severity: 'warn',
+    test: (bath) => {
+      if (bath?.shower?.walls?.layout !== 'inline-2') return null;
+      const showerW = parseShowerWidth(bath);
+      const ponyLen = parsePonyLength(bath);
+      if (!showerW || !ponyLen) return null;
+      const door = showerW - ponyLen;
+      if (door > 32) {
+        return {
+          message: `Door opening computes to ${door}" — wide for a hinged shower door (typical max ~32").`,
+          suggestion: `May need a pivot hinge or split into door + return panel. Worth a structural look at the hinge wall.`,
+        };
+      }
+      return null;
+    },
+  },
+  {
+    id: 'non-standard-pony-height',
+    category: 'sanity',
+    severity: 'info',
+    test: (bath) => {
+      const ponyH = parsePonyHeight(bath);
+      if (!ponyH) return null;
+      const standard = [36, 42, 48];
+      if (!standard.includes(ponyH)) {
+        return {
+          message: `Pony wall height of ${ponyH}" is non-standard (typical 36", 42", or 48").`,
+          suggestion: `Verify with customer that this is intentional — uncommon heights sometimes indicate a plan error.`,
+        };
+      }
+      return null;
+    },
+  },
+  // ===== Config completeness =====
+  {
+    id: 'shower-walls-ambiguous',
+    category: 'config',
+    severity: 'warn',
+    test: (bath) => {
+      if (!bath?.shower?.dims?.value || bath.shower.dims.value === '—') return null;
+      const walls = bath?.shower?.walls;
+      if (!walls || !walls.layout || walls.ambiguous) {
+        return {
+          message: `Shower wall configuration not yet locked in. Plan needs interpretation before fab.`,
+          suggestion: walls?.hint
+            ? `Plan note: ${walls.hint}`
+            : `Pick the wall layout in the Configure step before generating cut list.`,
+        };
+      }
+      return null;
+    },
+  },
+  // ===== Builder quirks =====
+  {
+    id: 'scale-as-noted',
+    category: 'builder-quirk',
+    severity: 'info',
+    test: (bath, builder, state) => {
+      if (state?.scaleStatus?.detected !== 'AS NOTED' && builder?.id !== 'preston-trail') return null;
+      // Only fire on first bath of each job (avoids repeating across every bath card)
+      if (state?.bathrooms?.[0]?.id !== bath.id) return null;
+      return {
+        message: `Plan scale is "AS NOTED" — verify each dimension against the title block on every sheet.`,
+        suggestion: `Common with Preston Trail. Field measure is non-negotiable here.`,
+      };
+    },
+  },
+  {
+    id: 'lingenfelter-needs-refs',
+    category: 'builder-quirk',
+    severity: 'warn',
+    test: (bath, builder, state) => {
+      if (builder?.id !== 'lingenfelter') return null;
+      if (state?.bathrooms?.[0]?.id !== bath.id) return null;
+      // Check whether job-specific designer references are present (intake field — placeholder for now)
+      if (!state?.designerReferences || state.designerReferences.length === 0) {
+        return {
+          message: `Lingenfelter job — no designer reference images uploaded yet.`,
+          suggestion: `Lingenfelter jobs vary widely. Renders need designer refs to look right. Upload selection sheets or mood-board images at intake.`,
+        };
+      }
+      return null;
+    },
+  },
+  // ===== Scope completeness =====
+  {
+    id: 'master-no-mirror-scope',
+    category: 'completeness',
+    severity: 'info',
+    test: (bath) => {
+      if (!/master/i.test(bath?.name || '')) return null;
+      if (!bath?.vanity?.count || bath.vanity.count === 0) return null;
+      // mirror.value is "Calculated below" or actual config — skip if either present
+      if (bath?.mirror?.value && bath.mirror.value !== '—') return null;
+      return {
+        message: `Master bath has a vanity but no mirror scope captured.`,
+        suggestion: `Was a mirror requested? Most master baths get one — worth a quick text to the builder if not in the plan.`,
+      };
+    },
+  },
+];
+
+// Run all flag rules against a bath and return active flag instances (filtering out accepted ones).
+function runFlagsCheck(bath, builder, state) {
+  const active = [];
+  for (const rule of FLAG_RULES) {
+    const result = rule.test(bath, builder, state);
+    if (!result) continue;
+    const decisionKey = `${bath.id}:${rule.id}`;
+    const decision = state?.flagDecisions?.[decisionKey];
+    if (decision?.kind === 'accepted') continue; // dismissed, don't show
+    active.push({
+      ...result,
+      ruleId: rule.id,
+      bathId: bath.id,
+      category: rule.category,
+      severity: rule.severity,
+      decisionKey,
+      decision: decision || null,
+    });
+  }
+  return active;
+}
+
+// Aggregate all flags across all bathrooms — for Output step roll-up
+function getAllFlags(state) {
+  const builder = BUILDERS.find(b => b.id === state.builder);
+  const all = [];
+  for (const bath of (state.bathrooms || [])) {
+    const flags = runFlagsCheck(bath, builder, state);
+    flags.forEach(f => all.push({ ...f, bathName: bath.name }));
+  }
+  return all;
+}
+
+// =============== SG JOB TREE (cut list output structure) ===============
+// Mirrors Smart Glazier's quote tree: parent "Supply and Install" line with nested children
+// (Field Measure, glass panels, Factory Fab, hardware, sundries, header, install).
+// Erika reads this top-to-bottom while doing SG entry — one parent → multiple components.
+
+// BOM template per shower config. Each template defines hardware counts and labor units.
+// Glass panel sizes are computed from bath dimensions, not stored in template.
+//
+// inline-2 numbers per Eridion shop standard, validated against Beck job (Apr 30 2026).
+// All confirmed by Erika except header length rule (pending Dion).
+const BOM_TEMPLATES = {
+  'inline-2': {
+    title: (bath) => `Supply and Install ${/master/i.test(bath.name) ? 'Primary ' : ''}Shower Glass`,
+    fieldMeasure: 1,
+    factoryFab: 8,
+    install: 3,
+    hardware: [
+      { sku: 'V1E037', label: 'Brushed Nickel', qty: 2, role: 'hinges' },
+      { sku: 'SGCU1', label: 'Brushed Nickel', qty: 2, role: 'wall clamps',
+        placement: 'Fixed panel · left edge · 10" from top, 10" from bottom' },
+      { sku: 'BM6X6', label: 'Brushed Nickel', qty: 1, role: 'handle' },
+    ],
+    sundries: [
+      { label: 'Silicone', qty: 2 },
+    ],
+    header: { sku: 'P770WS', stockLength: '98"', qty: 1 },
+  },
+  // Other configs can plug in here as we encode them — enclosure-3, corner, neo, bypass
+};
+
+// Compute cut-list panel sizes for inline-2 frameless from current state.
+// Returns { fixed: {w, h, label, edges, cutouts}, door: {...}, headerLength }
+function computeInline2Sizes(bath, cfg) {
+  const showerW = parseShowerWidth(bath);
+  const ponyLen = parsePonyLength(bath);
+  const ponyH = parsePonyHeight(bath) || 48;
+  if (!showerW || !ponyLen) return null;
+
+  const doorOpening = showerW - ponyLen;
+  const glassHeightStr = cfg?.glassHeight === 'Custom' ? (cfg?.customGlassHeight || "7'-0\"") : (cfg?.glassHeight || "7'-0\"");
+  const glassH = toInches(glassHeightStr) || 84;
+
+  // Eridion shop standards (Apr 30 2026 confirmed):
+  //   Door tolerance: 1/4" each jamb → door width = opening − 1/2"
+  //   Fixed panel post-side: 1/8" deduction → fixed width = pony length − 1/8"
+  //   Fixed panel height: glass-top down to pony-top = glass height − pony height
+  const doorW = doorOpening - 0.5;
+  const doorH = glassH;
+  const fixedW = ponyLen - 0.125;
+  const fixedH = glassH - ponyH;
+
+  // Header length: pending Dion confirmation.
+  // Beck case: 72" shower → header cut to 95". Until rule confirmed, use that as placeholder.
+  // For now, we just emit the stock length and "(pending Dion)" until rule is confirmed.
+  const headerCutTo = '95"';
+
+  return {
+    fixed: {
+      w: fixedW, h: fixedH,
+      label: '3/8" Clear Tempered',
+      role: 'Fixed panel',
+      edges: 'Flat Polish all 4',
+      cutouts: [
+        { type: 'Wall clamp notch', edge: 'Left', position: '10" from top' },
+        { type: 'Wall clamp notch', edge: 'Left', position: '10" from bottom' },
+      ],
+    },
+    door: {
+      w: doorW, h: doorH,
+      label: '3/8" Clear Tempered',
+      role: 'Door panel',
+      edges: 'Flat Polish all 4',
+      cutouts: [
+        { type: 'Hinge holes', edge: 'Right', position: 'Per V1E037 spec' },
+        { type: 'Handle hole', edge: 'Left', position: 'Per BM6X6 spec' },
+      ],
+    },
+    headerCutTo,
+    headerPending: true, // flag that the rule is still pending Dion's confirmation
+  };
+}
+
+// Build the full SG-shaped job tree for one shower bath. Returns a structured object
+// that renderJobTree can walk. Returns null if config isn't ready yet.
+function buildJobTree(bath, cfg) {
+  if (!cfg || !bath?.shower?.dims?.value || bath.shower.dims.value === '—') return null;
+  const layout = bath.shower?.walls?.layout;
+  const tmpl = BOM_TEMPLATES[layout];
+  if (!tmpl) {
+    return {
+      title: `Supply and Install ${bath.name} Shower Glass`,
+      unsupported: true,
+      reason: `BOM template for "${layout || 'unknown'}" config not yet encoded. Add to BOM_TEMPLATES to enable cut list.`,
+    };
+  }
+
+  // For inline-2, use the size calculator
+  let sizes = null;
+  if (layout === 'inline-2') sizes = computeInline2Sizes(bath, cfg);
+
+  return {
+    title: tmpl.title(bath),
+    parentQty: 1,
+    children: [
+      { kind: 'service', label: 'Field Measure & Consultation', qty: tmpl.fieldMeasure },
+      ...(sizes ? [
+        {
+          kind: 'glass',
+          label: sizes.fixed.label,
+          size: `${formatSgFraction(sizes.fixed.w)}" × ${formatSgFraction(sizes.fixed.h)}"`,
+          qty: 1,
+          role: sizes.fixed.role,
+          edges: sizes.fixed.edges,
+          cutouts: sizes.fixed.cutouts,
+        },
+        {
+          kind: 'glass',
+          label: sizes.door.label,
+          size: `${formatSgFraction(sizes.door.w)}" × ${formatSgFraction(sizes.door.h)}"`,
+          qty: 1,
+          role: sizes.door.role,
+          edges: sizes.door.edges,
+          cutouts: sizes.door.cutouts,
+        },
+      ] : [{ kind: 'placeholder', label: 'Glass panels — config not fully resolved' }]),
+      { kind: 'fab', label: 'Factory Fabrication', qty: tmpl.factoryFab },
+      ...tmpl.hardware.map(h => ({
+        kind: 'hardware',
+        sku: h.sku,
+        label: `${h.sku} ${h.label}`,
+        role: h.role,
+        qty: h.qty,
+        placement: h.placement,
+      })),
+      ...tmpl.sundries.map(s => ({ kind: 'sundry', label: s.label, qty: s.qty })),
+      {
+        kind: 'header',
+        label: `${tmpl.header.sku} ${tmpl.header.stockLength}`,
+        size: sizes ? sizes.headerCutTo : '—',
+        qty: tmpl.header.qty,
+        pending: sizes?.headerPending,
+      },
+      { kind: 'install', label: 'Install', qty: tmpl.install },
+    ],
+  };
+}
+
+// Format a decimal inch value as "23-1/2" or "47-7/8" — matches SG's display style (with dashes)
+function formatSgFraction(value) {
+  if (value == null) return '—';
+  const whole = Math.floor(value);
+  const frac = value - whole;
+  // Snap to nearest 1/8"
+  const eighths = Math.round(frac * 8);
+  if (eighths === 0) return `${whole}`;
+  if (eighths === 8) return `${whole + 1}`;
+  // Reduce
+  let num = eighths, den = 8;
+  while (num % 2 === 0 && den % 2 === 0) { num /= 2; den /= 2; }
+  return `${whole}-${num}/${den}`;
+}
 
 const BUILDERS = [
   {
@@ -2192,6 +2904,11 @@ const state = {
   showerConfigs: {}, // by bathroom id
   mirrorConfigs: {}, // by bathroom id
 
+  // Flags system: decisions persist across re-renders. Keyed `${bathId}:${flagId}`.
+  // Decision kinds: 'accepted' (dismissed), 'noted' (carries to proposal), 'ask' (open question)
+  flagDecisions: {},
+  designerReferences: [], // for Lingenfelter / custom-builder jobs
+
   // Loading flags
   extracting: false,
   parsingComm: false,
@@ -2540,7 +3257,7 @@ function mockExtraction() {
     };
   }
   // Builder mock — synthesizes a plausible 2-bath plan
-  // Master shower mirrors Erika's example plan: 72×42 shower, pony wall not explicitly drawn
+  // Master shower mirrors Erika's example plan: 72×42 shower with confirmed inline-2 layout
   return {
     bathrooms: [
       {
@@ -2550,13 +3267,13 @@ function mockExtraction() {
         shower: {
           type: { value: 'Curbless walk-in', conf: 'high', mode: 'auto' },
           dims: { value: '72" × 42"', conf: 'high', mode: 'auto' },
-          features: ['Linear drain', 'Niche 24×14', 'Bench 18×60'],
+          features: ['Linear drain', 'Niche 24×14', 'Bench 18×60', "4'-0\" pony wall (48\" tall)"],
           walls: {
-            layout: null,
-            conf: 'low',
-            mode: 'auto',
-            ambiguous: true,
-            hint: 'Plan shows 4\'-0" opening at top. Showerhead on right wall (full-height). Top wall could be pony wall — not labeled.',
+            layout: 'inline-2',
+            conf: 'high',
+            mode: 'manual',
+            ambiguous: false,
+            hint: 'Confirmed: 4\'-0" pony wall on left + 2\'-0" door opening on right. Showerhead on right full-height wall.',
           },
         },
         vanity: {
@@ -2719,6 +3436,9 @@ function renderReview() {
   $('#posture').onchange = e => state.posture = e.target.value;
   $('#decision-maker').onchange = e => state.decisionMaker = e.target.value;
 
+  // ===== Flags banner — runs all flag rules across all bathrooms =====
+  renderFlagsBanner();
+
   // Render bathroom cards
   const wrap = $('#review-cards');
   wrap.innerHTML = '';
@@ -2734,6 +3454,177 @@ function renderReview() {
       wrap.appendChild(c);
     });
   }
+}
+
+// =============== FLAGS BANNER ===============
+// Renders a yellow-band notice at the top of the Review step listing every fired flag
+// across all bathrooms. Each flag has three actions: Accept · Note in proposal · Ask before quoting.
+// Decisions persist in state.flagDecisions and survive re-renders.
+function renderFlagsBanner() {
+  const wrap = $('#flags-banner');
+  if (!wrap) return;
+
+  const builder = BUILDERS.find(b => b.id === state.builder);
+  const flagsByBath = [];
+  for (const bath of (state.bathrooms || [])) {
+    const flags = runFlagsCheck(bath, builder, state);
+    if (flags.length) flagsByBath.push({ bath, flags });
+  }
+
+  if (!flagsByBath.length) {
+    wrap.innerHTML = '';
+    wrap.classList.remove('has-flags');
+    return;
+  }
+
+  wrap.classList.add('has-flags');
+  const total = flagsByBath.reduce((acc, f) => acc + f.flags.length, 0);
+  let html = `
+    <div class="flags-h">
+      <span class="flags-mark">${total}</span>
+      <h3>Heads-up · ${total === 1 ? 'one item' : total + ' items'} worth a look</h3>
+      <span class="flags-sub">Senior-glazier check before you advance</span>
+    </div>
+    <div class="flags-list">`;
+  for (const { bath, flags } of flagsByBath) {
+    for (const f of flags) {
+      const decision = f.decision;
+      const stateClass = decision ? `is-${decision.kind}` : '';
+      html += `
+        <div class="flag-row ${stateClass}" data-key="${escapeHtml(f.decisionKey)}">
+          <div class="flag-meta">
+            <span class="flag-sev sev-${f.severity}"></span>
+            <span class="flag-bath">${escapeHtml(bath.name)}</span>
+            <span class="flag-cat">${escapeHtml(f.category)}</span>
+          </div>
+          <div class="flag-body">
+            <div class="flag-msg">${escapeHtml(f.message)}</div>
+            ${f.suggestion ? `<div class="flag-sugg">${escapeHtml(f.suggestion)}</div>` : ''}
+          </div>
+          <div class="flag-actions">
+            ${decision ? `
+              <span class="flag-decision">${
+                decision.kind === 'noted' ? '· Noted in proposal' :
+                decision.kind === 'ask' ? '· Open question for customer' : ''
+              }</span>
+              <button class="flag-action ghost" data-action="undo" data-key="${escapeHtml(f.decisionKey)}">Undo</button>
+            ` : `
+              <button class="flag-action accept" data-action="accept" data-key="${escapeHtml(f.decisionKey)}">Accept</button>
+              <button class="flag-action note" data-action="note" data-key="${escapeHtml(f.decisionKey)}">Note in proposal</button>
+              <button class="flag-action ask" data-action="ask" data-key="${escapeHtml(f.decisionKey)}">Ask customer</button>
+            `}
+          </div>
+        </div>`;
+    }
+  }
+  html += `</div>`;
+  wrap.innerHTML = html;
+
+  // Wire actions
+  wrap.querySelectorAll('button[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const action = btn.dataset.action;
+      // Map action verb (button label) to state noun (used in CSS classes and templates)
+      const kindMap = { accept: 'accepted', note: 'noted', ask: 'ask' };
+      if (action === 'undo') {
+        delete state.flagDecisions[key];
+      } else {
+        state.flagDecisions[key] = { kind: kindMap[action] || action, timestamp: Date.now() };
+      }
+      renderFlagsBanner(); // re-render to reflect new state
+    });
+  });
+}
+
+// =============== FLAG DECISIONS ROLL-UP (Output step) ===============
+// Surfaces decisions from the Review step:
+//   - 'ask' decisions become "Open questions" (amber, top of output, blocks ideal flow)
+//   - 'noted' decisions become "Notes for customer" (green, will carry to proposal)
+//   - 'accepted' decisions are dismissed and don't appear here
+// If there are no decisions, the section is hidden entirely.
+function renderFlagsOutput() {
+  const wrap = $('#flags-output');
+  if (!wrap) return;
+
+  const builder = BUILDERS.find(b => b.id === state.builder);
+  const asks = [];
+  const noted = [];
+
+  for (const bath of (state.bathrooms || [])) {
+    // Re-run flag rules so we see CURRENT flags (data may have changed since Review)
+    // Also include flags that were resolved with note/ask decisions even if rule no longer fires
+    const liveFlags = runFlagsCheck(bath, builder, state);
+
+    // Walk all decisions on this bath (might include flags whose rules don't fire now)
+    Object.entries(state.flagDecisions || {}).forEach(([key, decision]) => {
+      if (!key.startsWith(bath.id + ':')) return;
+      const ruleId = key.split(':')[1];
+      const rule = FLAG_RULES.find(r => r.id === ruleId);
+      if (!rule) return;
+      // Try to find the live flag, or reconstruct minimally from the rule
+      const live = liveFlags.find(f => f.ruleId === ruleId);
+      const flagInfo = live || {
+        ruleId, bathId: bath.id, decisionKey: key,
+        category: rule.category, severity: rule.severity,
+        message: '(rule no longer firing — data has changed since decision)',
+        suggestion: null, decision,
+      };
+      const item = { ...flagInfo, bathName: bath.name };
+      if (decision.kind === 'ask') asks.push(item);
+      else if (decision.kind === 'noted') noted.push(item);
+    });
+  }
+
+  if (!asks.length && !noted.length) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="flags-output-stack">';
+
+  // ===== Open questions (ask) — amber, prominent =====
+  if (asks.length) {
+    html += `
+      <div class="output-card output-card-ask">
+        <div class="output-card-h">
+          <span class="output-card-mark">!</span>
+          <h3>Open questions · ${asks.length === 1 ? 'one item' : asks.length + ' items'}</h3>
+          <span class="output-card-sub">Resolve before sending the quote</span>
+        </div>
+        <ul class="output-card-list">
+          ${asks.map(a => `
+            <li>
+              <div class="output-card-bath">${escapeHtml(a.bathName)}</div>
+              <div class="output-card-msg">${escapeHtml(a.message)}</div>
+              ${a.suggestion ? `<div class="output-card-sugg">${escapeHtml(a.suggestion)}</div>` : ''}
+            </li>`).join('')}
+        </ul>
+      </div>`;
+  }
+
+  // ===== Notes for customer (noted) — green =====
+  if (noted.length) {
+    html += `
+      <div class="output-card output-card-noted">
+        <div class="output-card-h">
+          <span class="output-card-mark">+</span>
+          <h3>Notes for customer · ${noted.length === 1 ? 'one item' : noted.length + ' items'}</h3>
+          <span class="output-card-sub">Will carry into the proposal Notes section</span>
+        </div>
+        <ul class="output-card-list">
+          ${noted.map(n => `
+            <li>
+              <div class="output-card-bath">${escapeHtml(n.bathName)}</div>
+              <div class="output-card-msg">${escapeHtml(n.message)}</div>
+              ${n.suggestion ? `<div class="output-card-sugg">${escapeHtml(n.suggestion)}</div>` : ''}
+            </li>`).join('')}
+        </ul>
+      </div>`;
+  }
+
+  html += '</div>';
+  wrap.innerHTML = html;
 }
 
 function renderBathCard(bath) {
@@ -3184,6 +4075,9 @@ function renderOutput() {
   const b = BUILDERS.find(x => x.id === state.builder);
   const showers = state.bathrooms.filter(x => x.shower?.type?.value && !/none|tbd|—/i.test(x.shower.type.value));
 
+  // ===== Flag decisions roll-up — surfaces "ask" and "noted" items =====
+  renderFlagsOutput();
+
   // SG mirror — placeholder structure, will be re-laid-out when Erika sends SG screenshots
   sg.innerHTML = `
     <div style="padding-top: 22px;">
@@ -3200,24 +4094,93 @@ function renderOutput() {
       <div class="divider"></div>
       ${showers.map(s => {
         const cfg = state.showerConfigs[s.id] || {};
-        const layoutLabel = (SHOWER_LAYOUTS.find(l => l.label === cfg.config)?.label) || cfg.config || '—';
-        const ghDisplay = cfg.glassHeight === 'Custom' ? (cfg.customGlassHeight || '—') : (cfg.glassHeight || '—');
+        const tree = buildJobTree(s, cfg);
+        if (!tree) return '';
+
+        if (tree.unsupported) {
+          return `
+          <div style="margin-bottom: 18px;">
+            <div class="field-lbl" style="color: var(--ink); font-weight: 600;">${escapeHtml(s.name)} — shower enclosure</div>
+            <div style="margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--warning); font-size: 13px; color: var(--warning); padding-top: 4px;">
+              ${escapeHtml(tree.reason)}
+            </div>
+          </div>`;
+        }
+
         return `
-        <div style="margin-bottom: 18px;">
-          <div class="field-lbl" style="color: var(--ink); font-weight: 600;">${escapeHtml(s.name)} — shower enclosure</div>
-          <div style="margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--green);">
-            <div class="mono" style="font-size: 13px;">${escapeHtml(s.shower?.dims?.value || '')} · ${escapeHtml(s.shower?.type?.value || '')}</div>
-            <div style="font-size: 13px; margin-top: 4px;">
-              ${escapeHtml(layoutLabel)}
+        <div class="sg-tree" style="margin-bottom: 22px;">
+          <div class="sg-tree-parent">
+            <div class="sg-tree-bath">${escapeHtml(s.name)}</div>
+            <div class="sg-tree-title-row">
+              <div class="sg-tree-title">${escapeHtml(tree.title)}</div>
+              <div class="sg-tree-qty"><span class="qty-x">${tree.parentQty}×</span></div>
             </div>
-            <div style="font-size: 13px; margin-top: 4px;">
-              ${escapeHtml(cfg.frame || '—')} · ${escapeHtml(cfg.glass || '')} ${escapeHtml((cfg.treatment || '').toLowerCase())} · ${escapeHtml(cfg.finish || '')}
-            </div>
-            <div style="font-size: 13px; margin-top: 4px;">
-              <span class="mono" style="font-size: 11px; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase;">Glass height</span>
-              <strong>${escapeHtml(ghDisplay)}</strong>
-            </div>
-            ${s.shower?.features?.length ? `<div class="mono" style="font-size: 11px; margin-top: 4px; color: var(--muted); letter-spacing: 0.06em;">+ ${s.shower.features.map(escapeHtml).join(' · ')}</div>` : ''}
+          </div>
+          <div class="sg-tree-children">
+            ${tree.children.map(c => {
+              if (c.kind === 'glass') {
+                return `
+                  <div class="sg-tree-row glass">
+                    <div class="sg-tree-row-main">
+                      <div class="sg-tree-line">
+                        <span class="sg-tree-bullet"></span>
+                        <span class="sg-tree-label">${escapeHtml(c.label)}</span>
+                        <span class="sg-tree-size">${escapeHtml(c.size)}</span>
+                        <span class="sg-tree-qty-inline">${c.qty}</span>
+                      </div>
+                      <div class="sg-tree-detail">${escapeHtml(c.role)} · Edges: ${escapeHtml(c.edges)}</div>
+                      ${(c.cutouts || []).length ? `
+                        <div class="sg-tree-cutouts">
+                          ${c.cutouts.map(co =>
+                            `<div class="sg-tree-cutout">↳ ${escapeHtml(co.type)} · ${escapeHtml(co.edge)} edge · ${escapeHtml(co.position)}</div>`
+                          ).join('')}
+                        </div>` : ''}
+                    </div>
+                  </div>`;
+              }
+              if (c.kind === 'header') {
+                return `
+                  <div class="sg-tree-row">
+                    <div class="sg-tree-row-main">
+                      <div class="sg-tree-line">
+                        <span class="sg-tree-bullet"></span>
+                        <span class="sg-tree-label">${escapeHtml(c.label)}</span>
+                        <span class="sg-tree-size">cut to ${escapeHtml(c.size)}</span>
+                        <span class="sg-tree-qty-inline">${c.qty}</span>
+                      </div>
+                      ${c.pending ? '<div class="sg-tree-detail pending">Header length pending Dion confirmation</div>' : ''}
+                    </div>
+                  </div>`;
+              }
+              if (c.kind === 'hardware') {
+                return `
+                  <div class="sg-tree-row">
+                    <div class="sg-tree-row-main">
+                      <div class="sg-tree-line">
+                        <span class="sg-tree-bullet"></span>
+                        <span class="sg-tree-label">${escapeHtml(c.label)}</span>
+                        <span class="sg-tree-role">${escapeHtml(c.role)}</span>
+                        <span class="sg-tree-qty-inline">${c.qty}</span>
+                      </div>
+                      ${c.placement ? `<div class="sg-tree-detail">${escapeHtml(c.placement)}</div>` : ''}
+                    </div>
+                  </div>`;
+              }
+              if (c.kind === 'placeholder') {
+                return `<div class="sg-tree-row pending">
+                  <div class="sg-tree-line"><span class="sg-tree-bullet"></span><span class="sg-tree-label">${escapeHtml(c.label)}</span></div>
+                </div>`;
+              }
+              // service, fab, sundry, install — simple row
+              return `
+                <div class="sg-tree-row">
+                  <div class="sg-tree-line">
+                    <span class="sg-tree-bullet"></span>
+                    <span class="sg-tree-label">${escapeHtml(c.label)}</span>
+                    <span class="sg-tree-qty-inline">${c.qty}</span>
+                  </div>
+                </div>`;
+            }).join('')}
           </div>
         </div>`;
       }).join('')}
