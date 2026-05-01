@@ -1206,6 +1206,211 @@ a { color: var(--navy); }
   background: var(--bg);
 }
 
+/* ===== Cut list overlay (focused SG-entry view) ===== */
+.cutlist-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 80;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s var(--ease);
+  display: flex;
+  flex-direction: column;
+}
+.cutlist-overlay.is-open { opacity: 1; pointer-events: auto; }
+.cutlist-overlay-h {
+  background: var(--navy);
+  color: white;
+  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.cutlist-overlay-title {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+.cutlist-overlay-mark {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+#cutlist-overlay-job {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 17px;
+  color: white;
+  letter-spacing: -0.01em;
+}
+.cutlist-overlay-actions { display: flex; gap: 8px; }
+.cutlist-overlay-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 36px 60px;
+  background: var(--bg);
+}
+.cutlist-block {
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  max-width: 1080px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.cutlist-block-h {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 10px;
+}
+.cutlist-block-loc {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+.cutlist-block-title {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+.cutlist-block-qty {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--tint-navy);
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+.cutlist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.cutlist-table .col-desc { width: 38%; }
+.cutlist-table .col-size { width: 18%; }
+.cutlist-table .col-qty { width: 8%; }
+.cutlist-table .col-notes { width: 36%; }
+.cutlist-table thead th {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px dashed var(--hairline-strong);
+}
+.cutlist-table tbody td {
+  padding: 9px 8px;
+  vertical-align: top;
+  border-bottom: 1px dotted var(--hairline);
+  color: var(--ink);
+  line-height: 1.4;
+}
+.cutlist-table tbody tr:last-child td { border-bottom: none; }
+.cutlist-table strong {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.cutlist-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-weight: 400;
+}
+.cutlist-size {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.cutlist-qty {
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+}
+.cutlist-notes {
+  font-size: 11px;
+  color: var(--body);
+  letter-spacing: 0.02em;
+}
+.cutlist-pending,
+.cutlist-pending-row td {
+  color: var(--warning);
+  font-style: italic;
+  font-size: 13px;
+  padding: 8px 0;
+}
+.cutlist-empty {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--muted);
+  max-width: 480px;
+  margin: 0 auto;
+}
+.cutlist-empty p { margin: 0 0 8px; font-size: 15px; }
+.cutlist-asks {
+  background: rgba(184, 116, 43, 0.08);
+  border: 1px solid rgba(184, 116, 43, 0.4);
+  border-radius: var(--r-md);
+  padding: 14px 18px;
+  margin-top: 22px;
+  max-width: 1080px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.cutlist-asks-h {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--warning);
+  margin-bottom: 8px;
+}
+.cutlist-asks ul {
+  margin: 0;
+  padding-left: 22px;
+}
+.cutlist-asks li {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+/* Print: hide everything except the cut list, print at full page */
+@media print {
+  body > *:not(.cutlist-overlay) { display: none !important; }
+  .cutlist-overlay { position: static; opacity: 1 !important; pointer-events: auto !important; }
+  .cutlist-overlay-h { background: white !important; color: var(--ink) !important; border-bottom: 2px solid var(--ink); }
+  .cutlist-overlay-mark { color: var(--ink) !important; border-color: var(--ink) !important; }
+  #cutlist-overlay-job { color: var(--ink) !important; }
+  .cutlist-overlay-actions { display: none !important; }
+  .cutlist-overlay-body { overflow: visible; padding: 14px 0; }
+  .cutlist-block { box-shadow: none; page-break-inside: avoid; }
+}
+
 /* ===== Pipeline preview modal ===== */
 .pipeline-modal-bg {
   position: fixed;
@@ -1582,6 +1787,7 @@ a { color: var(--navy); }
   </div>
   <div class="topbar-spacer"></div>
   <button class="topbar-btn" id="open-builders">Builders</button>
+  <button class="topbar-btn" id="open-cutlist">Cut list</button>
   <button class="topbar-btn" id="reset-job">New Job</button>
 </header>
 
@@ -1882,6 +2088,21 @@ a { color: var(--navy); }
     <button id="close-pipeline-modal">Close</button>
   </div>
   <div class="pipeline-modal-body" id="pipeline-modal-body"></div>
+</div>
+
+<!-- Overlay: Cut list (focused view for Smart Glazier entry) -->
+<div class="cutlist-overlay" id="cutlist-overlay">
+  <div class="cutlist-overlay-h">
+    <div class="cutlist-overlay-title">
+      <span class="cutlist-overlay-mark">Cut list</span>
+      <span id="cutlist-overlay-job"></span>
+    </div>
+    <div class="cutlist-overlay-actions">
+      <button class="topbar-btn" id="cutlist-print">Print</button>
+      <button class="topbar-btn" id="close-cutlist-overlay">Close</button>
+    </div>
+  </div>
+  <div class="cutlist-overlay-body" id="cutlist-overlay-body"></div>
 </div>
 
 <script>
@@ -2262,9 +2483,7 @@ function computeInline2Sizes(bath, cfg) {
   const fixedW = ponyLen - 0.125;
   const fixedH = glassH - ponyH;
 
-  // Header length: pending Dion confirmation.
-  // Beck case: 72" shower → header cut to 95". Until rule confirmed, use that as placeholder.
-  // For now, we just emit the stock length and "(pending Dion)" until rule is confirmed.
+  // Header length: confirmed by Dion (May 1 2026). For inline-2 frameless: always cut 98" P770WS stock to 95".
   const headerCutTo = '95"';
 
   return {
@@ -2289,7 +2508,7 @@ function computeInline2Sizes(bath, cfg) {
       ],
     },
     headerCutTo,
-    headerPending: true, // flag that the rule is still pending Dion's confirmation
+    headerPending: false,
   };
 }
 
@@ -3627,6 +3846,192 @@ function renderFlagsOutput() {
   wrap.innerHTML = html;
 }
 
+// =============== CUT LIST OVERLAY (focused view for SG entry) ===============
+// Available from any step via the topbar "Cut list" button. Opens a fullscreen overlay
+// showing only the SG-shaped job tree(s) — high-density, monospaced, optimized for
+// reading while doing Smart Glazier data entry in another window.
+function openCutList() {
+  const overlay = $('#cutlist-overlay');
+  const body = $('#cutlist-overlay-body');
+  const jobEl = $('#cutlist-overlay-job');
+
+  const builder = BUILDERS.find(b => b.id === state.builder);
+  const jobLine = [
+    builder?.name || 'No builder',
+    state.address || 'Address TBD',
+    state.architect || null,
+  ].filter(Boolean).join(' · ');
+  jobEl.textContent = jobLine;
+
+  // Build the cut list content
+  const showers = (state.bathrooms || []).filter(x =>
+    x.shower?.type?.value && !/none|tbd|—/i.test(x.shower.type.value)
+  );
+
+  if (!showers.length && !state.bathrooms?.some(b => (b.vanity?.count || 0) > 0)) {
+    body.innerHTML = `
+      <div class="cutlist-empty">
+        <p>No glass scope to display yet.</p>
+        <p class="muted">Pick a builder, load a plan, and configure showers and mirrors first.</p>
+      </div>`;
+    overlay.classList.add('is-open');
+    return;
+  }
+
+  let html = '';
+
+  // Showers — one block per shower bath, each block a full SG job tree
+  showers.forEach(s => {
+    const cfg = state.showerConfigs[s.id] || {};
+    const tree = buildJobTree(s, cfg);
+    if (!tree) return;
+
+    if (tree.unsupported) {
+      html += `
+        <div class="cutlist-block">
+          <div class="cutlist-block-h">
+            <span class="cutlist-block-loc">${escapeHtml(s.name).toUpperCase()}</span>
+            <span class="cutlist-block-title">${escapeHtml(tree.title)}</span>
+          </div>
+          <div class="cutlist-pending">${escapeHtml(tree.reason)}</div>
+        </div>`;
+      return;
+    }
+
+    html += `
+      <div class="cutlist-block">
+        <div class="cutlist-block-h">
+          <span class="cutlist-block-loc">${escapeHtml(s.name).toUpperCase()}</span>
+          <span class="cutlist-block-title">${escapeHtml(tree.title)}</span>
+          <span class="cutlist-block-qty">× ${tree.parentQty}</span>
+        </div>
+        <table class="cutlist-table">
+          <colgroup>
+            <col class="col-desc"/>
+            <col class="col-size"/>
+            <col class="col-qty"/>
+            <col class="col-notes"/>
+          </colgroup>
+          <thead>
+            <tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            ${tree.children.map(c => {
+              if (c.kind === 'glass') {
+                const cutoutsTxt = (c.cutouts || []).map(co =>
+                  `${co.type} · ${co.edge} · ${co.position}`
+                ).join(' · ');
+                return `<tr>
+                  <td><strong>${escapeHtml(c.label)}</strong><div class="cutlist-sub">${escapeHtml(c.role)} · ${escapeHtml(c.edges)}</div></td>
+                  <td class="cutlist-size">${escapeHtml(c.size)}</td>
+                  <td class="cutlist-qty">${c.qty}</td>
+                  <td class="cutlist-notes">${escapeHtml(cutoutsTxt)}</td>
+                </tr>`;
+              }
+              if (c.kind === 'header') {
+                return `<tr>
+                  <td><strong>${escapeHtml(c.label)}</strong></td>
+                  <td class="cutlist-size">cut to ${escapeHtml(c.size)}</td>
+                  <td class="cutlist-qty">${c.qty}</td>
+                  <td class="cutlist-notes"></td>
+                </tr>`;
+              }
+              if (c.kind === 'hardware') {
+                return `<tr>
+                  <td><strong>${escapeHtml(c.label)}</strong></td>
+                  <td></td>
+                  <td class="cutlist-qty">${c.qty}</td>
+                  <td class="cutlist-notes">${escapeHtml(c.role || '')}${c.placement ? ' · ' + escapeHtml(c.placement) : ''}</td>
+                </tr>`;
+              }
+              if (c.kind === 'placeholder') {
+                return `<tr class="cutlist-pending-row">
+                  <td colspan="4">${escapeHtml(c.label)}</td>
+                </tr>`;
+              }
+              // service, fab, sundry, install
+              return `<tr>
+                <td><strong>${escapeHtml(c.label)}</strong></td>
+                <td></td>
+                <td class="cutlist-qty">${c.qty}</td>
+                <td class="cutlist-notes"></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  });
+
+  // Mirrors — one block per bath that has a mirror config
+  const mirrorBaths = (state.bathrooms || []).filter(b =>
+    (b.vanity?.count || 0) > 0 && state.mirrorConfigs?.[b.id]
+  );
+  mirrorBaths.forEach(b => {
+    const mc = state.mirrorConfigs[b.id];
+    const wallW = toInches(b.vanity?.wallWidth?.value);
+    if (!wallW) return;
+    const heightStr = mc.mirrorHeight === 'Custom' ? (mc.customMirrorHeight || '40"') : mc.mirrorHeight;
+    const heightIn = toInches(String(heightStr).replace('"', '')) || 40;
+    const calc = calcMirrorOptions(wallW, b.vanity?.count || 1, heightIn);
+    const sel = calc.options.find(o => o.id === mc.selectedOption) || calc.options[0];
+    if (!sel) return;
+
+    html += `
+      <div class="cutlist-block">
+        <div class="cutlist-block-h">
+          <span class="cutlist-block-loc">${escapeHtml(b.name).toUpperCase()}</span>
+          <span class="cutlist-block-title">Vanity Mirror${sel.count > 1 ? 's' : ''}</span>
+          <span class="cutlist-block-qty">× 1</span>
+        </div>
+        <table class="cutlist-table">
+          <colgroup>
+            <col class="col-desc"/>
+            <col class="col-size"/>
+            <col class="col-qty"/>
+            <col class="col-notes"/>
+          </colgroup>
+          <thead>
+            <tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1/4" Mirror · Polished edge</strong></td>
+              <td class="cutlist-size">${formatFraction(sel.eachWidth)}" × ${formatFraction(sel.eachHeight)}"</td>
+              <td class="cutlist-qty">${sel.count}</td>
+              <td class="cutlist-notes">${escapeHtml(sel.position)}</td>
+            </tr>
+            <tr>
+              <td><strong>Install</strong></td>
+              <td></td>
+              <td class="cutlist-qty">${sel.count}</td>
+              <td class="cutlist-notes"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>`;
+  });
+
+  // Footer summary
+  const flags = getAllFlags(state);
+  const asks = flags.filter(f => state.flagDecisions?.[f.decisionKey]?.kind === 'ask');
+  if (asks.length) {
+    html += `
+      <div class="cutlist-asks">
+        <div class="cutlist-asks-h">⚠ Open questions before submitting quote</div>
+        <ul>
+          ${asks.map(a => `<li><strong>${escapeHtml(a.bathName)}:</strong> ${escapeHtml(a.message)}</li>`).join('')}
+        </ul>
+      </div>`;
+  }
+
+  body.innerHTML = html;
+  overlay.classList.add('is-open');
+}
+
+function closeCutList() {
+  $('#cutlist-overlay').classList.remove('is-open');
+}
+
 function renderBathCard(bath) {
   const c = el('div', 'bath');
   const flagHtml = (bath.flags || []).map(f =>
@@ -4327,10 +4732,17 @@ function closeDrawer() {
 // Pipeline modal close handlers
 $('#close-pipeline-modal').addEventListener('click', closeRenderPipeline);
 $('#pipeline-modal-bg').addEventListener('click', closeRenderPipeline);
+
+// Cut list overlay handlers
+$('#open-cutlist').addEventListener('click', openCutList);
+$('#close-cutlist-overlay').addEventListener('click', closeCutList);
+$('#cutlist-print').addEventListener('click', () => window.print());
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeDrawer();
     closeRenderPipeline();
+    closeCutList();
   }
 });
 
