@@ -947,43 +947,241 @@ a { color: var(--navy); }
 
 .render-frame {
   aspect-ratio: 4/3;
-  background: var(--bg);
+  background: var(--paper);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--r-md);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: center;
   text-align: center;
-  padding: 20px;
+  padding: 0;
   position: relative;
   overflow: hidden;
 }
-.render-frame::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    repeating-linear-gradient(45deg, transparent 0, transparent 20px, rgba(36,50,77,0.025) 20px, rgba(36,50,77,0.025) 21px);
+.render-frame svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: calc(100% - 24px);
 }
-.render-frame .placeholder {
-  position: relative;
-  z-index: 1;
+.render-frame-caption {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+  padding: 4px 8px;
+  border-top: 1px dashed var(--hairline);
+  background: var(--bg);
 }
-.render-frame .placeholder strong {
-  display: block;
+
+/* ===== Pipeline preview modal ===== */
+.pipeline-modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 31, 46, 0.55);
+  z-index: 70;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease);
+}
+.pipeline-modal-bg.is-open { opacity: 1; pointer-events: auto; }
+
+.pipeline-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.96);
+  width: min(960px, 94vw);
+  max-height: 90vh;
+  background: var(--bg);
+  border-radius: var(--r-md);
+  z-index: 71;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s var(--ease);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+}
+.pipeline-modal.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+.pipeline-modal-h {
+  background: var(--navy);
+  color: white;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pipeline-modal-h h2 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 18px;
+  margin: 0;
+}
+.pipeline-modal-h button {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.pipeline-modal-h button:hover { background: rgba(255,255,255,0.1); }
+.pipeline-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.pipeline-step {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.pipeline-step-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.pipeline-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.pipeline-step-h h3 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 16px;
+  margin: 0;
+  color: var(--ink);
+  flex: 1;
+}
+.pipeline-step-h .tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: var(--tint-navy);
+  color: var(--navy);
+  border-radius: 2px;
+}
+.pipeline-step-content {
+  margin-left: 34px;
+}
+.pipeline-step-content .desc {
+  font-size: 13px;
+  color: var(--body);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.pipeline-diagram-preview {
+  background: white;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 8px;
+  max-height: 280px;
+  overflow: hidden;
+}
+.pipeline-diagram-preview svg { display: block; width: 100%; height: auto; max-height: 260px; }
+.pipeline-refs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pipeline-ref-tile {
+  background: var(--bg);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  flex: 1;
+  min-width: 140px;
+  text-align: center;
+}
+.pipeline-ref-tile.job-specific {
+  background: var(--tint-green);
+  border-color: var(--green);
+  color: var(--green-dark);
+}
+.pipeline-prompt {
+  background: var(--bg);
+  border-left: 3px solid var(--navy);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: var(--mono);
+  line-height: 1.6;
+  color: var(--body);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.pipeline-arrow {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--muted);
+  padding: 6px 0;
+}
+.pipeline-output {
+  background: var(--paper);
+  border: 1px solid var(--green);
+  border-radius: var(--r-sm);
+  padding: 14px 16px;
+  text-align: center;
+}
+.pipeline-output strong {
   font-family: var(--display);
   font-size: 17px;
-  font-style: italic;
-  font-weight: 500;
-  color: var(--navy);
-  letter-spacing: -0.01em;
-  text-transform: none;
-  margin-bottom: 6px;
+  color: var(--green-dark);
+  display: block;
+  margin-bottom: 4px;
+}
+.pipeline-output .meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pipeline-status {
+  background: rgba(184, 116, 43, 0.08);
+  border: 1px solid rgba(184, 116, 43, 0.3);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--warning);
+  margin-top: 14px;
+  line-height: 1.5;
+}
+.pipeline-status strong {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 3px;
 }
 
 /* ===== Output screen drop-zone ===== */
@@ -1336,6 +1534,16 @@ a { color: var(--navy); }
   <div class="drawer-body" id="drawer-body"></div>
 </aside>
 
+<!-- Modal: Render pipeline preview -->
+<div class="pipeline-modal-bg" id="pipeline-modal-bg"></div>
+<div class="pipeline-modal" id="pipeline-modal">
+  <div class="pipeline-modal-h">
+    <h2 id="pipeline-modal-title">Render pipeline</h2>
+    <button id="close-pipeline-modal">Close</button>
+  </div>
+  <div class="pipeline-modal-body" id="pipeline-modal-body"></div>
+</div>
+
 <script>
 /* ============================================================
    ScopeKit · MVP build
@@ -1368,6 +1576,90 @@ const SHOWER_LAYOUTS = [
   { id: 'bypass', label: 'Bypass slider' },
   { id: 'dual', label: 'Dual: framed + frameless options' },
 ];
+
+// =============== RENDER PROFILES (prompt harness per builder) ===============
+// What gets sent to the Flux ControlNet worker for each builder. Three inputs:
+// 1. Constraint diagram (geometry — generated live from ScopeKit data)
+// 2. Reference image(s) (style — builder portfolio photos)
+// 3. Text prompt (materials, mood)
+// Reference image hierarchy: (1) job-specific designer refs override, (2) profile defaults below.
+const RENDER_PROFILES = {
+  hines: {
+    label: 'Hines · transitional',
+    references: ['hines-portfolio-01.jpg', 'hines-portfolio-02.jpg', 'hines-portfolio-03.jpg'],
+    prompt: 'transitional master bathroom, marble or marble-look porcelain in white and gray, herringbone tile accent wall, matte black plumbing fixtures, white painted millwork doors, freestanding tub centerpiece, well-lit, magazine quality interior photography',
+    composition: 'showcase tub + glass + accent tile combo',
+    cropStyle: 'medium-wide',
+  },
+  lingenfelter: {
+    label: 'Lingenfelter · custom luxury',
+    references: ['__job_specific__'],
+    prompt: 'luxury custom master bathroom, contemporary or transitional design, frameless glass disappearing into ceiling, gold or matte black hardware, sculptural freestanding tub, large windows with views, magazine-quality interior photography, architectural digest style',
+    composition: 'wide room context',
+    cropStyle: 'wide',
+    notes: 'Override prompt with job-specific designer references at intake',
+  },
+  grand: {
+    label: 'Grand Homes · mid-tier production',
+    references: ['grand-mid-tier-01.jpg', 'grand-mid-tier-02.jpg'],
+    prompt: 'mid-tier production builder master bathroom, clean white tile, brushed nickel hardware, neutral palette, well-staged real estate marketing photography',
+    composition: 'medium crop, clean and clear',
+    cropStyle: 'medium',
+    notes: 'Range varies $300K-$1MM+. Default mid-tier. North Division grid-frame is anomaly.',
+  },
+  gutman: {
+    label: 'Gutman · neutral',
+    references: ['hines-portfolio-01.jpg'],
+    prompt: 'transitional master bathroom, semi-frameless glass, brushed nickel hardware, neutral palette',
+    composition: 'medium crop',
+    cropStyle: 'medium',
+  },
+  martyn: {
+    label: 'Martyn Hammer · premium modern',
+    references: [],
+    prompt: 'modern luxury master bathroom, frameless glass, matte black hardware, low-iron clear glass, contemporary fixtures, architectural photography',
+    composition: 'wide room context',
+    cropStyle: 'wide',
+  },
+  drhorton: {
+    label: 'DR Horton · bottom-tier production',
+    references: ['drhorton-model-01.jpg'],
+    prompt: 'production builder bathroom, prefab fiberglass shower surround with framed brushed nickel door, white painted walls, vinyl plank flooring, real estate listing photography style, well-lit and clean, builder-grade',
+    composition: 'close on glass scope, clean and clear',
+    cropStyle: 'close',
+    notes: 'Surround is prefab fiberglass — never marble. Always 2-panel framed inline.',
+  },
+  'artistic-metal': {
+    label: 'Artistic Metal · neutral premium',
+    references: [],
+    prompt: 'modern bathroom, frameless glass with matte black hardware, low-iron glass, clean lines, architectural photography',
+    composition: 'medium-wide',
+    cropStyle: 'medium-wide',
+  },
+  'small-commercial': {
+    label: 'Small Commercial · neutral',
+    references: [],
+    prompt: 'commercial bathroom, framed glass enclosure, chrome hardware, clean professional photography',
+    composition: 'medium',
+    cropStyle: 'medium',
+  },
+  'home-owner': {
+    label: 'Home Owner · customer-customizable',
+    references: ['__job_specific__'],
+    prompt: 'tasteful modern bathroom, neutral palette',
+    composition: 'medium',
+    cropStyle: 'medium',
+    notes: 'Customer uploads inspiration images at intake; profile defaults overridden',
+  },
+  'preston-trail': {
+    label: 'Preston Trail · cost-conscious mid',
+    references: ['drhorton-model-01.jpg'],
+    prompt: 'mid-tier production builder bathroom, prefab or basic tile shower surround with framed brushed nickel door, white walls, vinyl plank or basic tile floor, real estate marketing photography',
+    composition: 'close on glass scope',
+    cropStyle: 'close',
+    notes: 'No PT photos available — use DR Horton refs as same-tier anchors',
+  },
+};
 
 const BUILDERS = [
   {
@@ -1594,6 +1886,273 @@ function calcMirrorOptions(wallWidthIn, vanityCount, mirrorHeightIn) {
   // Above 9'-0" wall: single is impractical, default to two
   // Below 9'-0": both shown, default depends on vanity count
   return { options: opts, recommendedId: vanityCount >= 2 ? 'two' : (W < 108 ? 'one' : 'two') };
+}
+
+// =============== CONSTRAINT DIAGRAM GENERATOR ===============
+// Takes a bathroom + shower config, produces an SVG elevation-view line drawing
+// optimized for ControlNet input. Black = walls/ceiling, hatched gray = pony wall,
+// blue = glass panels, dashed = door swing.
+//
+// This is the GEOMETRY input for the render pipeline:
+//   constraint diagram + reference image + prompt -> Flux ControlNet -> photoreal render
+//
+// Output is a self-contained SVG string. Works at any size. The Worker would
+// rasterize this to PNG and feed it as the ControlNet input image.
+function buildConstraintDiagram(bath, cfg, options = {}) {
+  const W = options.width || 680;
+  const H = options.height || 420;
+  const isCompact = W <= 420; // inline card view — show less detail
+  const opts = {
+    width: W,
+    height: H,
+    showLabels: options.showLabels !== false,
+    showDimensions: options.showDimensions !== false && !isCompact, // skip dimensions when compact
+    monochrome: options.monochrome || false,
+    compact: isCompact,
+  };
+
+  // Parse shower dimensions (e.g. "72\" × 42\"") into inches
+  const dimMatch = String(bath.shower?.dims?.value || '').match(/(\d+(?:\.\d+)?)\s*["']?\s*[×x]\s*(\d+(?:\.\d+)?)/);
+  const showerW = dimMatch ? parseFloat(dimMatch[1]) : 72;
+  const showerD = dimMatch ? parseFloat(dimMatch[2]) : 42;
+
+  // Glass height
+  const glassHeightStr = cfg.glassHeight === 'Custom' ? (cfg.customGlassHeight || "7'-0\"") : cfg.glassHeight;
+  const glassH = toInches(glassHeightStr) || 84;
+
+  // Ceiling height
+  const ceilH = toInches(bath.ceiling?.value) || 120;
+
+  // Wall configuration → determines layout
+  const layout = bath.shower?.walls?.layout || 'inline-2';
+
+  // Layout the canvas: shower elevation centered horizontally
+  const margin = opts.compact
+    ? { top: 36, right: 30, bottom: 36, left: 30 }
+    : { top: 60, right: 90, bottom: 70, left: 90 };
+  const canvasW = opts.width - margin.left - margin.right;
+  const canvasH = opts.height - margin.top - margin.bottom;
+
+  // Vertical extent: the *visible elevation height* is glass height + small headroom
+  // (we don't draw the full 10' ceiling — that wastes canvas space). Show ceiling
+  // as a hint line if it's close enough to fit, otherwise show an "above glass" gap.
+  const headroomIn = 18; // inches of context above glass
+  const visibleH = glassH + headroomIn; // total elevation height we draw
+  const showCeiling = (ceilH - glassH) <= 36; // only draw ceiling if it's <=3' above glass
+
+  // Pick a scale that fills the canvas while maintaining aspect ratio
+  const scale = Math.min(canvasW / showerW, canvasH / visibleH);
+  const drawW = showerW * scale;
+  const drawH = visibleH * scale;
+  const ox = margin.left + (canvasW - drawW) / 2; // origin x (left edge of shower, centered)
+  const oy = margin.top + canvasH;                 // origin y (floor level — bottom of canvas)
+  const ceilingY = oy - (ceilH * scale);           // where ceiling would be (may be off-canvas)
+  const topY = oy - drawH;                         // top of the drawn elevation
+
+  // Color palette — using literal hex (this SVG is consumed by ControlNet which doesn't care about CSS vars)
+  const C = {
+    wall: '#363634',       // Wall/ceiling lines
+    glass: '#185FA5',      // Glass panels (blue)
+    pony: '#5F5E5A',       // Pony wall hatch
+    label: '#363634',
+    dimLine: '#888780',
+    feature: '#53964F',    // Niche/bench/etc.
+    bg: '#FFFFFF',
+  };
+
+  // If monochrome (for stricter ControlNet edge mode), force everything to dark line on white
+  if (opts.monochrome) {
+    C.glass = '#000000';
+    C.feature = '#000000';
+    C.pony = '#000000';
+  }
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${opts.width} ${opts.height}" style="background: ${C.bg};">`;
+  svg += `<defs>`;
+  svg += `<pattern id="cd-pony" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="${C.pony}" stroke-width="${opts.monochrome ? 1.5 : 1}"/></pattern>`;
+  svg += `</defs>`;
+
+  // ====== WALLS — outer rectangle representing the shower opening (elevation view) ======
+  svg += `<rect x="${ox}" y="${topY}" width="${drawW}" height="${drawH}" fill="none" stroke="${C.wall}" stroke-width="2.5"/>`;
+
+  // Optional ceiling hint line (only if ceiling is within drawn area)
+  if (showCeiling && ceilingY > topY && ceilingY < oy) {
+    svg += `<line x1="${ox}" y1="${ceilingY}" x2="${ox + drawW}" y2="${ceilingY}" stroke="${C.wall}" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5"/>`;
+    if (opts.showLabels) {
+      svg += `<text x="${ox - 8}" y="${ceilingY + 4}" text-anchor="end" font-family="sans-serif" font-size="9" fill="${C.dimLine}">${ceilH}" ceil</text>`;
+    }
+  }
+
+  // ====== Layout-specific geometry ======
+  // Two-panel inline (door + fixed over pony wall)
+  if (layout === 'inline-2' || cfg.config === 'Auto · alcove' || /inline/i.test(cfg.config || '')) {
+    // Pony wall on LEFT (per Beck pattern). Get pony dims from features list, default to plausible split.
+    let ponyLengthIn = null, ponyHeightIn = 48; // default 48" tall
+    const features = bath.shower?.features || [];
+    features.forEach(f => {
+      const m = String(f).match(/(\d+(?:\.\d+)?)\s*["']?\s*pony\s*wall/i);
+      if (m) ponyLengthIn = parseFloat(m[1]);
+      const h = String(f).match(/pony\s*wall.+?(\d+(?:\.\d+)?)["']?\s*(?:tall|high)/i);
+      if (h) ponyHeightIn = parseFloat(h[1]);
+    });
+    // If pony length not in features, try to infer from shower walls hint or split 4'+2'
+    if (!ponyLengthIn) {
+      // Beck case: 72" total = 48" pony + 24" door
+      ponyLengthIn = Math.round(showerW * 2 / 3); // 2/3 split fallback
+    }
+    const doorOpeningIn = showerW - ponyLengthIn;
+    const ponyLenPx = ponyLengthIn * scale;
+    const ponyHPx = ponyHeightIn * scale;
+    const doorOpenPx = doorOpeningIn * scale;
+    const glassHPx = glassH * scale;
+
+    // Pony wall (hatched)
+    svg += `<rect x="${ox}" y="${oy - ponyHPx}" width="${ponyLenPx}" height="${ponyHPx}" fill="url(#cd-pony)" stroke="${C.pony}" stroke-width="1.5"/>`;
+
+    // Fixed glass panel — sits on top of pony wall
+    const fixedPanelX = ox;
+    const fixedPanelY = oy - glassHPx;
+    const fixedPanelH = glassHPx - ponyHPx;
+    svg += `<rect x="${fixedPanelX}" y="${fixedPanelY}" width="${ponyLenPx}" height="${fixedPanelH}" fill="none" stroke="${C.glass}" stroke-width="2.5"/>`;
+    // Glass shading hint (very subtle, helps ControlNet read it as glass)
+    if (!opts.monochrome) {
+      svg += `<rect x="${fixedPanelX}" y="${fixedPanelY}" width="${ponyLenPx}" height="${fixedPanelH}" fill="${C.glass}" fill-opacity="0.06"/>`;
+    }
+
+    // Door panel — full glass height
+    const doorX = ox + ponyLenPx;
+    const doorY = oy - glassHPx;
+    svg += `<rect x="${doorX}" y="${doorY}" width="${doorOpenPx}" height="${glassHPx}" fill="none" stroke="${C.glass}" stroke-width="2.5"/>`;
+    if (!opts.monochrome) {
+      svg += `<rect x="${doorX}" y="${doorY}" width="${doorOpenPx}" height="${glassHPx}" fill="${C.glass}" fill-opacity="0.06"/>`;
+    }
+
+    // Door handle hint (small mark, indicates door not fixed)
+    // Place near the latch edge (left side of door panel), away from center label
+    const handleY = oy - glassHPx * 0.45;
+    svg += `<circle cx="${doorX + Math.min(8, doorOpenPx * 0.15)}" cy="${handleY}" r="${opts.compact ? 1.5 : 2.5}" fill="${C.glass}"/>`;
+
+    // Door swing arc (dashed)
+    const hingeX = doorX + doorOpenPx;
+    const hingeY = oy;
+    const swingRadius = doorOpenPx * 0.7;
+    svg += `<path d="M ${doorX} ${oy} A ${swingRadius} ${swingRadius} 0 0 1 ${hingeX} ${oy - swingRadius}" fill="none" stroke="${C.glass}" stroke-width="0.8" stroke-dasharray="3 2" opacity="${opts.monochrome ? 1 : 0.6}"/>`;
+
+    if (opts.showLabels) {
+      const labelSize = opts.compact ? 8 : 11;
+      // Pony wall label
+      svg += `<text x="${ox + ponyLenPx / 2}" y="${oy - ponyHPx / 2 + 4}" text-anchor="middle" font-family="sans-serif" font-size="${labelSize}" font-weight="600" fill="${C.pony}">PONY WALL</text>`;
+      // Fixed glass label
+      svg += `<text x="${ox + ponyLenPx / 2}" y="${fixedPanelY + fixedPanelH / 2 + 4}" text-anchor="middle" font-family="sans-serif" font-size="${labelSize}" font-weight="600" fill="${C.glass}">FIXED GLASS</text>`;
+      // Door label — placed slightly higher than handle to avoid collision
+      svg += `<text x="${doorX + doorOpenPx / 2}" y="${oy - glassHPx * 0.7 + 4}" text-anchor="middle" font-family="sans-serif" font-size="${labelSize}" font-weight="600" fill="${C.glass}">DOOR</text>`;
+    }
+
+    if (opts.showDimensions) {
+      const dimY = oy + 28;
+      // Pony length dim
+      svg += `<line x1="${ox}" y1="${dimY}" x2="${ox + ponyLenPx}" y2="${dimY}" stroke="${C.dimLine}" stroke-width="0.5"/>`;
+      svg += `<line x1="${ox}" y1="${dimY - 3}" x2="${ox}" y2="${dimY + 3}" stroke="${C.dimLine}" stroke-width="0.5"/>`;
+      svg += `<line x1="${ox + ponyLenPx}" y1="${dimY - 3}" x2="${ox + ponyLenPx}" y2="${dimY + 3}" stroke="${C.dimLine}" stroke-width="0.5"/>`;
+      svg += `<text x="${ox + ponyLenPx / 2}" y="${dimY + 14}" text-anchor="middle" font-family="sans-serif" font-size="10" fill="${C.dimLine}">${fromInches(ponyLengthIn, true)} pony · ${ponyHeightIn}" tall</text>`;
+      // Door opening dim
+      svg += `<line x1="${ox + ponyLenPx}" y1="${dimY}" x2="${ox + drawW}" y2="${dimY}" stroke="${C.dimLine}" stroke-width="0.5"/>`;
+      svg += `<line x1="${ox + drawW}" y1="${dimY - 3}" x2="${ox + drawW}" y2="${dimY + 3}" stroke="${C.dimLine}" stroke-width="0.5"/>`;
+      svg += `<text x="${ox + ponyLenPx + doorOpenPx / 2}" y="${dimY + 14}" text-anchor="middle" font-family="sans-serif" font-size="10" fill="${C.dimLine}">${fromInches(doorOpeningIn, true)} door</text>`;
+      // Heights on left side
+      svg += `<text x="${ox - 8}" y="${oy - ponyHPx + 4}" text-anchor="end" font-family="sans-serif" font-size="10" fill="${C.dimLine}">${ponyHeightIn}"</text>`;
+      svg += `<text x="${ox - 8}" y="${oy - glassHPx + 4}" text-anchor="end" font-family="sans-serif" font-size="10" fill="${C.dimLine}">${glassH}"</text>`;
+    }
+  }
+  // 3-sided enclosure (door on open side, walls on three sides)
+  else if (layout === 'enclosure-3') {
+    const glassHPx = glassH * scale;
+    // Single door panel at center, takes up 70% of the opening
+    const doorWPx = drawW * 0.7;
+    const doorXPx = ox + (drawW - doorWPx) / 2;
+    svg += `<rect x="${doorXPx}" y="${oy - glassHPx}" width="${doorWPx}" height="${glassHPx}" fill="none" stroke="${C.glass}" stroke-width="2.5"/>`;
+    if (!opts.monochrome) svg += `<rect x="${doorXPx}" y="${oy - glassHPx}" width="${doorWPx}" height="${glassHPx}" fill="${C.glass}" fill-opacity="0.06"/>`;
+    svg += `<circle cx="${doorXPx + 6}" cy="${oy - glassHPx * 0.5}" r="2" fill="${C.glass}"/>`;
+    if (opts.showLabels) svg += `<text x="${doorXPx + doorWPx / 2}" y="${oy - glassHPx / 2 + 4}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="600" fill="${C.glass}">DOOR</text>`;
+  }
+  // Default fallback — just show shower outline
+  else {
+    const glassHPx = glassH * scale;
+    svg += `<rect x="${ox + 4}" y="${oy - glassHPx}" width="${drawW - 8}" height="${glassHPx}" fill="none" stroke="${C.glass}" stroke-width="2.5" stroke-dasharray="4 2"/>`;
+    if (opts.showLabels) svg += `<text x="${ox + drawW / 2}" y="${oy - glassHPx / 2}" text-anchor="middle" font-family="sans-serif" font-size="11" fill="${C.glass}">GLASS · ${escapeHtml(cfg.config || 'config TBD')}</text>`;
+  }
+
+  // Niche / bench / drain features along the bottom wall
+  const features = bath.shower?.features || [];
+  features.forEach((f, i) => {
+    if (/niche/i.test(f)) {
+      const nicheW = opts.compact ? 24 : 40;
+      const nicheH = opts.compact ? 4 : 6;
+      const nicheX = ox + drawW * 0.3 + i * (nicheW + 8);
+      const nicheY = oy - 4 - nicheH;
+      svg += `<rect x="${nicheX}" y="${nicheY}" width="${nicheW}" height="${nicheH}" fill="none" stroke="${C.feature}" stroke-width="1"/>`;
+      if (opts.showLabels && !opts.compact) svg += `<text x="${nicheX + nicheW / 2}" y="${oy + 14}" text-anchor="middle" font-family="sans-serif" font-size="9" fill="${C.feature}">${escapeHtml(f)}</text>`;
+    }
+  });
+
+  // Floor line (heavier)
+  svg += `<line x1="${ox - 4}" y1="${oy}" x2="${ox + drawW + 4}" y2="${oy}" stroke="${C.wall}" stroke-width="3"/>`;
+
+  // Title strip at top — only on full-size diagrams
+  if (opts.showLabels && !opts.compact) {
+    svg += `<text x="${margin.left}" y="${margin.top - 28}" font-family="sans-serif" font-size="11" font-weight="600" fill="${C.label}" letter-spacing="1">CONSTRAINT DIAGRAM · ${escapeHtml((bath.name || 'Shower').toUpperCase())}</text>`;
+    svg += `<text x="${margin.left}" y="${margin.top - 14}" font-family="sans-serif" font-size="10" fill="${C.dimLine}">${escapeHtml(showerW + '" × ' + showerD + '" · ' + (cfg.frame || 'config TBD') + ' · ' + glassHeightStr + ' glass height')}</text>`;
+  }
+
+  svg += `</svg>`;
+  return svg;
+}
+
+// Build the render-pipeline input bundle for a given shower (what would post to the worker)
+function buildRenderPayload(bath, cfg) {
+  const builder = BUILDERS.find(b => b.id === state.builder);
+  const profile = RENDER_PROFILES[state.builder] || RENDER_PROFILES['home-owner'];
+  const constraintSvg = buildConstraintDiagram(bath, cfg, { monochrome: true, showLabels: false, showDimensions: false });
+  return {
+    bathId: bath.id,
+    builderId: state.builder,
+    builderName: builder?.name || 'Unknown',
+    constraintSvg,        // input 1: geometry
+    references: profile.references,  // input 2: style anchors
+    prompt: buildEffectivePrompt(profile, cfg),  // input 3: text
+    composition: profile.composition,
+    cropStyle: profile.cropStyle,
+  };
+}
+
+// Build the effective prompt by combining profile prompt with config-specific details
+function buildEffectivePrompt(profile, cfg) {
+  const finishMap = {
+    'Brushed nickel': 'brushed nickel hardware, slightly warm silver tone',
+    'Chrome': 'polished chrome hardware, bright silver finish',
+    'Matte black': 'matte black hardware, modern fixtures',
+    'Champagne bronze': 'warm brass hardware, soft gold tone',
+    'Polished brass': 'polished brass hardware, bright gold finish',
+  };
+  const treatmentMap = {
+    'Clear': 'clear glass',
+    'Low-iron': 'low-iron starphire glass, ultra-clear',
+    'Textured': 'textured privacy glass',
+  };
+  const frameMap = {
+    'Frameless': 'frameless glass enclosure',
+    'Semi-frameless': 'semi-frameless glass with channel',
+    'Framed': 'framed glass enclosure',
+  };
+
+  const parts = [
+    profile.prompt,
+    frameMap[cfg.frame] || cfg.frame,
+    `${cfg.glass || '3/8"'} ${treatmentMap[cfg.treatment] || cfg.treatment || 'clear glass'}`,
+    finishMap[cfg.finish] || cfg.finish,
+  ].filter(Boolean);
+
+  return parts.join(', ');
 }
 
 const SKETCH_OPTIONS = [
@@ -2404,11 +2963,11 @@ function renderConfigCard(bath) {
           <select class="field-select" data-cfg="treatment"><option>Clear</option><option>Low-iron</option><option>Textured</option></select></div>
       </div>
       <div>
-        <div class="render-frame">
-          ${cfg.rendered ? `<div class="placeholder"><strong>Render output</strong>${escapeHtml(cfg.frame)} · ${escapeHtml(cfg.finish)} · ${escapeHtml(cfg.glass)} ${escapeHtml(cfg.treatment.toLowerCase())}</div>` :
-            `<div class="placeholder"><strong>${API_CONFIG.fluxEnabled ? 'Click to render' : 'Flux render · worker required'}</strong>~$0.04 / image · vibe asset, not a technical drawing</div>`}
+        <div class="render-frame" data-bath-render="${escapeHtml(bath.id)}">
+          ${buildConstraintDiagram(bath, cfg, { width: 380, height: 240, showDimensions: true, showLabels: true })}
+          <div class="render-frame-caption">Constraint diagram · auto-generated from config</div>
         </div>
-        <button class="btn ghost sm" style="margin-top:10px;width:100%;" data-render="${bath.id}">${cfg.rendered ? 'Re-render' : (API_CONFIG.fluxEnabled ? 'Generate render' : 'Stub render (preview)')}</button>
+        <button class="btn ghost sm" style="margin-top:10px;width:100%;" data-pipeline="${escapeHtml(bath.id)}">Preview render pipeline</button>
       </div>
     </div>
   `;
@@ -2425,11 +2984,106 @@ function renderConfigCard(bath) {
   c.querySelectorAll('input[data-cfg]').forEach(inp => {
     inp.addEventListener('input', () => { cfg[inp.dataset.cfg] = inp.value; });
   });
-  c.querySelector('[data-render]').addEventListener('click', () => {
-    cfg.rendered = true;
-    renderConfigure();
+  c.querySelector('[data-pipeline]').addEventListener('click', () => {
+    showRenderPipeline(bath, cfg);
   });
   return c;
+}
+
+// =============== RENDER PIPELINE MODAL ===============
+// Shows the user EXACTLY what would get sent to the worker for this shower.
+// Three inputs visualized: constraint diagram, reference image(s), text prompt.
+// Plus the pipeline status (whether the worker is wired or stubbed).
+function showRenderPipeline(bath, cfg) {
+  const payload = buildRenderPayload(bath, cfg);
+  const profile = RENDER_PROFILES[state.builder] || RENDER_PROFILES['home-owner'];
+  const builder = BUILDERS.find(b => b.id === state.builder);
+  const isJobSpecific = profile.references[0] === '__job_specific__';
+
+  const modal = $('#pipeline-modal');
+  const body = $('#pipeline-modal-body');
+  const titleEl = $('#pipeline-modal-title');
+  titleEl.textContent = `Render pipeline · ${bath.name}`;
+
+  body.innerHTML = `
+    <div class="pipeline-step">
+      <div class="pipeline-step-h">
+        <span class="pipeline-step-num">1</span>
+        <h3>Constraint diagram</h3>
+        <span class="tag">Geometry</span>
+      </div>
+      <div class="pipeline-step-content">
+        <div class="desc">Auto-generated from your Configure step. Locks in the door position, pony wall location, glass height. Sent to ControlNet so the AI can't get the geometry wrong.</div>
+        <div class="pipeline-diagram-preview">
+          ${buildConstraintDiagram(bath, cfg, { width: 700, height: 360, showDimensions: true, showLabels: true })}
+        </div>
+      </div>
+    </div>
+
+    <div class="pipeline-arrow">↓</div>
+
+    <div class="pipeline-step">
+      <div class="pipeline-step-h">
+        <span class="pipeline-step-num">2</span>
+        <h3>Reference image(s)</h3>
+        <span class="tag">Style anchor</span>
+      </div>
+      <div class="pipeline-step-content">
+        <div class="desc">${escapeHtml(profile.label)}. ${isJobSpecific ?
+          'Custom builder — uses job-specific designer references uploaded at intake.' :
+          'Builder profile defaults — past portfolio photos passed alongside the prompt as visual style anchors.'}</div>
+        <div class="pipeline-refs">
+          ${isJobSpecific ?
+            `<div class="pipeline-ref-tile job-specific">JOB-SPECIFIC<br><span style="font-size:10px;">Upload at intake</span></div>` :
+            (profile.references.length ? profile.references.map(r => `<div class="pipeline-ref-tile">${escapeHtml(r)}</div>`).join('') :
+            `<div class="pipeline-ref-tile">No refs configured</div>`)}
+        </div>
+        ${profile.notes ? `<div style="margin-top:10px;font-size:12px;color:var(--muted);font-style:italic;">${escapeHtml(profile.notes)}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="pipeline-arrow">↓</div>
+
+    <div class="pipeline-step">
+      <div class="pipeline-step-h">
+        <span class="pipeline-step-num">3</span>
+        <h3>Text prompt</h3>
+        <span class="tag">Materials &amp; mood</span>
+      </div>
+      <div class="pipeline-step-content">
+        <div class="desc">Builder profile prompt + your config selections (frame, finish, glass, treatment).</div>
+        <div class="pipeline-prompt">${escapeHtml(payload.prompt)}</div>
+      </div>
+    </div>
+
+    <div class="pipeline-arrow">↓ POST to worker</div>
+
+    <div class="pipeline-output">
+      <strong>Photoreal render</strong>
+      <div class="meta">${API_CONFIG.workerUrl ?
+        `Generated via Flux ControlNet · ~$0.003 / image · ~8 sec` :
+        `Pipeline ready · awaiting worker deployment`}</div>
+    </div>
+
+    ${API_CONFIG.workerUrl ? '' : `
+      <div class="pipeline-status">
+        <strong>Worker not deployed</strong>
+        Constraint diagram is generated and ready to ship. To activate live rendering: deploy the Cloudflare Worker (worker.js + wrangler.toml in your outputs), set REPLICATE_API_KEY as a secret, then update API_CONFIG.workerUrl in scopekit.html. First test render: 8-10 seconds, ~$0.003.
+      </div>`}
+
+    <div style="margin-top: 20px; padding: 14px 16px; background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-sm); font-size: 12px;">
+      <div class="mono" style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--navy); margin-bottom: 6px;">Composition · ${escapeHtml(payload.cropStyle)}</div>
+      <div style="color: var(--muted);">${escapeHtml(payload.composition)}</div>
+    </div>
+  `;
+
+  $('#pipeline-modal-bg').classList.add('is-open');
+  modal.classList.add('is-open');
+}
+
+function closeRenderPipeline() {
+  $('#pipeline-modal-bg').classList.remove('is-open');
+  $('#pipeline-modal').classList.remove('is-open');
 }
 
 function renderMirrorCard(bath) {
@@ -2706,6 +3360,16 @@ function closeDrawer() {
   drawer.classList.remove('is-open');
   drawerBg.classList.remove('is-open');
 }
+
+// Pipeline modal close handlers
+$('#close-pipeline-modal').addEventListener('click', closeRenderPipeline);
+$('#pipeline-modal-bg').addEventListener('click', closeRenderPipeline);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeDrawer();
+    closeRenderPipeline();
+  }
+});
 
 function renderDrawer() {
   const body = $('#drawer-body');
