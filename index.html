@@ -3131,6 +3131,10 @@ const state = {
   // Loading flags
   extracting: false,
   parsingComm: false,
+
+  // Flow B (no plans, hand-drawn measure sheets). Populated when user uploads
+  // images. Shape: { job: {name, address, measured_by}, baths: [...], uncertainty_flags: [...] }
+  fieldMeasureData: null,
 };
 
 // =============== UTIL ===============
@@ -3341,6 +3345,7 @@ function resetJob() {
     showerConfigs: {},
     mirrorConfigs: {},
     extracting: false,
+    fieldMeasureData: null,
   });
   // Reset DOM
   $('#builder-select').value = '';
@@ -3364,17 +3369,29 @@ function resetJob() {
 // =============== EXTRACTION ===============
 async function runExtraction() {
   if (state.intakeMode === 'builder' && state.planFiles.length === 0 && !state.builder) {
-    alert('Upload a plan PDF or pick a builder before continuing.');
+    alert('Upload a plan PDF, pick a builder, or upload field-measure photos before continuing.');
     return;
   }
   state.extracting = true;
+  state.fieldMeasureData = null; // clear any previous flow-B data so re-runs are clean
   updateCTA();
 
-  // For MVP preview: produce a realistic mock extraction.
-  // When a Cloudflare Worker is configured, real Claude extraction (PDF + vision) runs server-side.
+  // Detect Flow B (no plans, only Dion's field-measure photos): if all uploaded
+  // files are images, run the field-measure vision extraction instead of plan extraction.
+  const allImages = state.planFiles.length > 0 && state.planFiles.every(f => (f.type || '').startsWith('image/'));
+
   let extractionResult = null;
   try {
-    if (API_CONFIG.workerUrl) {
+    if (allImages) {
+      // FLOW B — hand-drawn measure sheets
+      const fmData = await extractFieldMeasureViaClaude(state.planFiles);
+      state.fieldMeasureData = fmData;
+      // Stub bathroom skeleton so existing review-screen scaffolding doesn't barf.
+      // The flow-B view (renderFieldMeasurePanel) is what actually shows the data.
+      extractionResult = { bathrooms: [], otherItems: [], scaleStatus: null };
+      // If the extraction surfaced job header info, persist address.
+      if (fmData?.job?.address && !state.address) state.address = fmData.job.address;
+    } else if (API_CONFIG.workerUrl) {
       extractionResult = await extractViaWorker();
     } else if (state.intakeMode === 'builder' && state.comm && state.comm.trim().length > 20) {
       // In-artifact preview: use Claude to actually parse the comm block.
@@ -3385,6 +3402,7 @@ async function runExtraction() {
     }
   } catch (err) {
     console.warn('Extraction failed, falling back to mock:', err);
+    alert('Extraction failed: ' + (err.message || err) + '\n\nFalling back to mock data so the review screen still loads.');
     extractionResult = mockExtraction();
   }
 
@@ -3451,6 +3469,154 @@ async function extractViaWorker() {
   });
   if (!res.ok) throw new Error('Worker error: ' + res.status);
   return await res.json();
+}
+
+// =============== FIELD-MEASURE EXTRACTION (Flow B — no plans) ===============
+// Used when intake is Dion's hand-drawn sketches on Eridion's field-measure
+// form rather than a builder's plan PDF. Sends photos as base64 to Claude
+// vision and returns structured per-bath piece data.
+
+async function imageToResizedBase64(file, maxDim = 2000, quality = 0.85) {
+  // Phone photos are typically 3-4MB and dimensions like 4032×3024. Anthropic's
+  // image limit is 5MB after base64 encoding, so resize first to keep payload small.
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      const base64 = dataUrl.split(',')[1] || '';
+      resolve({ base64, mediaType: 'image/jpeg', width: w, height: h });
+    };
+    img.onerror = (e) => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.src = url;
+  });
+}
+
+const FIELD_MEASURE_PROMPT = `You are looking at hand-drawn glass shop measure sheets from Eridion Glass. A glazier (Dion) measured a residential bathroom on-site and sketched dimensions on Eridion's standard pre-printed form.
+
+THE FORM has these fixed elements:
+- "ERIDION GLASS" logo and "Site Plan" label
+- Header fields: Job Name, Job Address, Measured By, Date
+- A vertical column with: Glass Type, Color, Number of Panels, Tempered Panels, Total Cutouts, Total Holes, Polished Edges, Hardware Required, Hardware Color, Notes, Install Time & Men
+- A blank Site Plan area where the glazier sketches
+- Bottom legend: "X = Exposed Edges"
+
+Note: photos may be ROTATED. The form is landscape; some photos may have been taken sideways. Mentally rotate as needed.
+
+DION'S CONVENTIONS:
+- Each rectangle in the Site Plan area is either a glass panel or a mirror.
+- Mirrors are usually labeled with "M" inside the rectangle.
+- Numbers along rectangle edges are dimensions IN INCHES — whole numbers ("42") or fractions ("47 1/4", "23 5/8", "38 5/8", "77 3/4", "55 7/16").
+- A CIRCLED number indicates the actual cut size — the fabrication dimension. If both circled and uncircled values appear for the same edge, prefer the CIRCLED value.
+- "X" near an edge means that edge is exposed and needs to be polished.
+- Bath labels written near sections identify which bathroom: "Master", "Bath 2", "Bath 3", "Bath 4", "Bath 5", "Powder", "Jack & Jill", etc.
+- Hardware finish written per bath: "Sati-Brass" or "SB" = Satin Brass; "BN" = Brushed Nickel; "MB" = Matte Black; "PC" = Polished Chrome.
+- Cross-outs (numbers struck through) indicate revisions. Use the un-crossed value, ignore the crossed-out one.
+- Multiple baths often appear on one sheet. Multiple sheets often cover one job — synthesize across all photos.
+
+Return JSON ONLY (no markdown fences, no prose). Structure exactly:
+
+{
+  "job": {
+    "name": "extracted job name from header",
+    "address": "extracted address from header",
+    "measured_by": "extracted name or null"
+  },
+  "baths": [
+    {
+      "name": "Master",
+      "finish": "Satin Brass",
+      "pieces": [
+        {
+          "kind": "glass",
+          "role": "shower-door",
+          "width_in": "47 1/4",
+          "height_in": "78",
+          "is_cut_size": true,
+          "exposed_edges": ["top", "left"],
+          "notes": ""
+        }
+      ],
+      "bath_notes": ""
+    }
+  ],
+  "uncertainty_flags": [
+    "List specific things you're uncertain about: hard-to-read fractions, ambiguous bath assignments, illegible notes. Each item should be specific enough that a human can verify on the photo."
+  ]
+}
+
+Rules:
+- "kind" is "glass" or "mirror"
+- "role" is one of: "shower-door", "shower-fixed-panel", "shower-header", "shower-return", "vanity-mirror", "other-mirror", "other"
+- Keep fractions as strings exactly as written (e.g. "47 1/4", not "47.25")
+- "is_cut_size" is true when the dimensions came from circled values, false otherwise
+- "exposed_edges" is an array containing any of: "top", "bottom", "left", "right". Empty array if none marked.
+- Be CONSERVATIVE with uncertainty_flags — better to flag than to guess wrong on dimensions.`;
+
+async function extractFieldMeasureViaClaude(files) {
+  // Resize and encode all images
+  const encoded = [];
+  for (const f of files) {
+    try {
+      const enc = await imageToResizedBase64(f, 2000, 0.85);
+      encoded.push(enc);
+    } catch (e) {
+      console.warn('Skipped file (encode failed):', f.name, e);
+    }
+  }
+  if (!encoded.length) throw new Error('No images could be encoded');
+
+  // Build the message — image blocks first, then the prompt
+  const content = [];
+  encoded.forEach(enc => {
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: enc.mediaType, data: enc.base64 }
+    });
+  });
+  content.push({ type: 'text', text: FIELD_MEASURE_PROMPT });
+
+  const body = {
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4000,
+    messages: [{ role: 'user', content }],
+  };
+
+  // Route through worker if configured, else direct to Anthropic (artifact preview).
+  let url, headers;
+  if (API_CONFIG.workerUrl) {
+    url = API_CONFIG.workerUrl + '/api/messages';
+    headers = { 'Content-Type': 'application/json' };
+  } else {
+    url = 'https://api.anthropic.com/v1/messages';
+    headers = { 'Content-Type': 'application/json' };
+  }
+
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error('Field-measure extract failed (' + res.status + '): ' + errText.substring(0, 240));
+  }
+  const data = await res.json();
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+  const clean = text.replace(/```json|```/g, '').trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(clean);
+  } catch (e) {
+    console.warn('Could not parse field-measure JSON. Raw response:', text);
+    throw new Error('Could not parse extraction JSON. Check console for raw response.');
+  }
+  return parsed;
 }
 
 function mockExtraction() {
@@ -3621,6 +3787,158 @@ function pushFlag(target, flag) {
 }
 
 // =============== REVIEW SCREEN ===============
+// =============== FIELD-MEASURE REVIEW PANEL (Flow B) ===============
+// Renders Dion's hand-drawn measurements as readable per-bath blocks
+// with copy-to-clipboard for fast SG entry. Used in place of the standard
+// review-cards path when state.fieldMeasureData is populated.
+
+function renderFieldMeasurePanel() {
+  const data = state.fieldMeasureData;
+  if (!data) return null;
+
+  const wrap = el('div', '');
+
+  // Job header card
+  const header = el('div', 'card marked');
+  const totalPieces = (data.baths || []).reduce((s, b) => s + ((b.pieces || []).length), 0);
+  header.innerHTML = `
+    <div class="card-h">
+      <h3 class="card-title">${escapeHtml(data.job?.name || 'Field measure')}</h3>
+      <span class="card-meta">field-measure intake · exact dims</span>
+    </div>
+    <div style="font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 14px;">
+      ${escapeHtml(data.job?.address || 'address not detected')}
+      ${data.job?.measured_by ? ' · measured by ' + escapeHtml(data.job.measured_by) : ''}
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <button class="btn primary sm" onclick="copyFieldMeasureAll()">Copy entire job as text</button>
+      <span class="card-meta">${(data.baths || []).length} bath${(data.baths || []).length === 1 ? '' : 's'} · ${totalPieces} piece${totalPieces === 1 ? '' : 's'} total</span>
+    </div>
+  `;
+  wrap.appendChild(header);
+
+  // Per-bath cards
+  (data.baths || []).forEach((b, idx) => {
+    const c = el('div', 'card marked');
+    c.style.marginTop = '14px';
+
+    const piecesHtml = (b.pieces || []).map(p => {
+      const expArr = p.exposed_edges || [];
+      const exposedTxt = expArr.length ? expArr.join(' + ') + ' polished' : 'no exposed';
+      const cutFlag = p.is_cut_size ? '' : ' <span style="color:var(--warning); font-size:10px; font-family:var(--mono);">(not circled)</span>';
+      const kindBadge = p.kind === 'mirror' ? 'MIR' : 'GLS';
+      return `<tr>
+        <td><strong style="font-family:var(--mono); font-size:11px;">${kindBadge}</strong> · ${escapeHtml(p.role || '?')}</td>
+        <td style="font-family:var(--mono); font-size:13px; white-space:nowrap;">${escapeHtml(p.width_in || '?')} × ${escapeHtml(p.height_in || '?')}${cutFlag}</td>
+        <td style="font-size:12px;">${escapeHtml(exposedTxt)}</td>
+        <td style="font-size:12px; color:var(--muted);">${escapeHtml(p.notes || '')}</td>
+      </tr>`;
+    }).join('');
+
+    c.innerHTML = `
+      <div class="card-h">
+        <h3 class="card-title">${escapeHtml(b.name || 'Bath ' + (idx + 1))}</h3>
+        <span class="card-meta">${escapeHtml(b.finish || 'finish: unknown')}</span>
+      </div>
+      ${b.bath_notes ? `<div style="font-size:13px; color:var(--muted); margin-bottom:10px; font-style:italic;">${escapeHtml(b.bath_notes)}</div>` : ''}
+      <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+        <colgroup>
+          <col style="width:32%"><col style="width:24%"><col style="width:20%"><col style="width:24%">
+        </colgroup>
+        <thead>
+          <tr style="border-bottom:1px solid var(--hairline); text-align:left;">
+            <th style="padding:6px 8px; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Piece</th>
+            <th style="padding:6px 8px; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Size (W × H)</th>
+            <th style="padding:6px 8px; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Edges</th>
+            <th style="padding:6px 8px; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Notes</th>
+          </tr>
+        </thead>
+        <tbody style="vertical-align:top;">${piecesHtml || '<tr><td colspan="4" style="padding:8px; color:var(--muted); font-style:italic;">No pieces extracted for this bath</td></tr>'}</tbody>
+      </table>
+      <button class="btn ghost sm" onclick="copyFieldMeasureBath(${idx})">Copy this bath as text</button>
+    `;
+    wrap.appendChild(c);
+  });
+
+  // Uncertainty flags — clearly visible so Erika can verify before SG entry
+  if (data.uncertainty_flags && data.uncertainty_flags.length) {
+    const flags = el('div', 'card');
+    flags.style.marginTop = '14px';
+    flags.style.background = 'rgba(184, 116, 43, 0.06)';
+    flags.style.borderColor = 'rgba(184, 116, 43, 0.4)';
+    flags.innerHTML = `
+      <div class="card-h">
+        <h3 class="card-title" style="color: var(--warning);">Verify on photo</h3>
+        <span class="card-meta">${data.uncertainty_flags.length} item${data.uncertainty_flags.length === 1 ? '' : 's'}</span>
+      </div>
+      <ul style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.7;">
+        ${data.uncertainty_flags.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
+      </ul>
+    `;
+    wrap.appendChild(flags);
+  }
+
+  return wrap;
+}
+
+function fieldMeasureBathToText(b) {
+  const lines = [];
+  lines.push(`${(b.name || 'Bath').toUpperCase()} — ${b.finish || 'finish unknown'}`);
+  if (b.bath_notes) lines.push('  Notes: ' + b.bath_notes);
+  (b.pieces || []).forEach(p => {
+    const exp = (p.exposed_edges || []).length ? ' · ' + p.exposed_edges.join('+') + ' polished' : '';
+    const cs = p.is_cut_size ? '' : ' (not circled — verify)';
+    const notes = p.notes ? ' · ' + p.notes : '';
+    lines.push(`  ${p.kind} ${p.role}: ${p.width_in} × ${p.height_in}${cs}${exp}${notes}`);
+  });
+  return lines.join('\n');
+}
+
+async function copyFieldMeasureBath(idx) {
+  const b = state.fieldMeasureData?.baths?.[idx];
+  if (!b) return;
+  const text = fieldMeasureBathToText(b);
+  try {
+    await navigator.clipboard.writeText(text);
+    flashCopiedToast(`${b.name || 'Bath'} copied`);
+  } catch (e) {
+    alert('Could not copy automatically. Here is the text — copy manually:\n\n' + text);
+  }
+}
+
+async function copyFieldMeasureAll() {
+  const data = state.fieldMeasureData;
+  if (!data) return;
+  const lines = [];
+  lines.push(data.job?.name || 'Untitled job');
+  if (data.job?.address) lines.push(data.job.address);
+  if (data.job?.measured_by) lines.push('Measured by: ' + data.job.measured_by);
+  lines.push('');
+  (data.baths || []).forEach(b => {
+    lines.push(fieldMeasureBathToText(b));
+    lines.push('');
+  });
+  if (data.uncertainty_flags?.length) {
+    lines.push('UNCERTAINTY FLAGS — verify on photo:');
+    data.uncertainty_flags.forEach(f => lines.push('  · ' + f));
+  }
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    flashCopiedToast('Entire job copied');
+  } catch (e) {
+    alert('Could not copy automatically. Here is the text — copy manually:\n\n' + text);
+  }
+}
+
+function flashCopiedToast(msg) {
+  const t = el('div', '');
+  t.style.cssText = 'position:fixed; top:24px; right:24px; background:var(--ink); color:#fff; padding:10px 16px; border-radius:6px; font-size:13px; z-index:10000; box-shadow:0 4px 12px rgba(0,0,0,0.2);';
+  t.textContent = msg || 'Copied';
+  document.body.appendChild(t);
+  setTimeout(() => { t.remove(); }, 1800);
+}
+
 function renderReview() {
   // Builder strip
   const stripWrap = $('#builder-strip-wrap');
@@ -3661,6 +3979,14 @@ function renderReview() {
   // Render bathroom cards
   const wrap = $('#review-cards');
   wrap.innerHTML = '';
+
+  // Flow B (field-measure intake) — render the per-bath measurement panel at the top.
+  // The standard bathroom cards below will be empty in this case (state.bathrooms === []).
+  if (state.fieldMeasureData) {
+    const fmPanel = renderFieldMeasurePanel();
+    if (fmPanel) wrap.appendChild(fmPanel);
+  }
+
   state.bathrooms.forEach(bath => {
     wrap.appendChild(renderBathCard(bath));
   });
