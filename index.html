@@ -3604,7 +3604,7 @@ async function extractFieldMeasureViaClaude(files) {
 
   const body = {
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
+    max_tokens: 8000,
     messages: [{ role: 'user', content }],
   };
 
@@ -3625,15 +3625,69 @@ async function extractFieldMeasureViaClaude(files) {
   }
   const data = await res.json();
   const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-  const clean = text.replace(/```json|```/g, '').trim();
-  let parsed;
-  try {
-    parsed = JSON.parse(clean);
-  } catch (e) {
-    console.warn('Could not parse field-measure JSON. Raw response:', text);
-    throw new Error('Could not parse extraction JSON. Check console for raw response.');
-  }
+
+  // ── Robust JSON extraction ─────────────────────────────────────
+  // The model sometimes wraps JSON in markdown fences or pads it with prose
+  // ("Here is the extracted data:" before, "Let me know if..." after).
+  // Strategy: strip fences, then carve out the largest balanced { ... } block.
+  const parsed = parseExtractionJSON(text, data);
   return parsed;
+}
+
+// Pulls a JSON object out of model text that may include markdown fences,
+// preamble prose, postamble prose, or all of the above. Logs aggressively
+// to the console on failure so the user (or Claude) can diagnose later.
+function parseExtractionJSON(rawText, fullResponse) {
+  if (!rawText || !rawText.trim()) {
+    console.error('[ScopeKit extract] EMPTY response from model. Full API payload:', fullResponse);
+    throw new Error('Extraction returned empty response. Check console — likely a worker/auth issue.');
+  }
+
+  // 1) Strip markdown fences in any common variant: ```json, ```JSON, ``` json, ```
+  let cleaned = rawText
+    .replace(/```\s*json\s*/gi, '')
+    .replace(/```\s*JSON\s*/g, '')
+    .replace(/```/g, '')
+    .trim();
+
+  // 2) Try direct parse first (most successful case)
+  try { return JSON.parse(cleaned); } catch (_) { /* fall through */ }
+
+  // 3) Carve out the largest balanced { ... } substring.
+  // Find first '{' and walk forward tracking depth — stop at the matching '}'.
+  const firstBrace = cleaned.indexOf('{');
+  if (firstBrace === -1) {
+    console.error('[ScopeKit extract] No JSON object found in response. Raw text:', rawText);
+    console.error('[ScopeKit extract] Full API response:', fullResponse);
+    throw new Error('Extraction returned no JSON. Check console for raw response — likely the model gave a refusal or chatted instead of returning JSON.');
+  }
+  let depth = 0, lastBrace = -1, inString = false, escape = false;
+  for (let i = firstBrace; i < cleaned.length; i++) {
+    const c = cleaned[i];
+    if (escape) { escape = false; continue; }
+    if (c === '\\') { escape = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) { lastBrace = i; break; } }
+  }
+  if (lastBrace === -1) {
+    console.error('[ScopeKit extract] Unbalanced braces in JSON. Raw text:', rawText);
+    throw new Error('Extraction JSON was malformed (unbalanced braces). Check console for raw response.');
+  }
+  const carved = cleaned.substring(firstBrace, lastBrace + 1);
+  try { return JSON.parse(carved); }
+  catch (e) {
+    // 4) Last-ditch: strip trailing commas before } or ] (a common LLM tic)
+    const detrailing = carved.replace(/,(\s*[}\]])/g, '$1');
+    try { return JSON.parse(detrailing); }
+    catch (e2) {
+      console.error('[ScopeKit extract] JSON.parse failed even after carving. Carved string was:', carved);
+      console.error('[ScopeKit extract] Original raw text:', rawText);
+      console.error('[ScopeKit extract] Parse error:', e2.message);
+      throw new Error('Could not parse extraction JSON. Check console for raw response and the parse error.');
+    }
+  }
 }
 
 function mockExtraction() {
