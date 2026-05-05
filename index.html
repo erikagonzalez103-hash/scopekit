@@ -3788,9 +3788,10 @@ function pushFlag(target, flag) {
 
 // =============== REVIEW SCREEN ===============
 // =============== FIELD-MEASURE REVIEW PANEL (Flow B) ===============
-// Renders Dion's hand-drawn measurements as readable per-bath blocks
-// with copy-to-clipboard for fast SG entry. Used in place of the standard
-// review-cards path when state.fieldMeasureData is populated.
+// Renders Dion's hand-drawn measurements as editable per-bath blocks with
+// a 2D sketch of each shower's panels (proportionally scaled). Vision guesses
+// fill the fields; user corrects misreads inline. State updates on blur, and
+// the sketch + cut list both re-read from state.fieldMeasureData on open.
 
 function renderFieldMeasurePanel() {
   const data = state.fieldMeasureData;
@@ -3798,52 +3799,90 @@ function renderFieldMeasurePanel() {
 
   const wrap = el('div', '');
 
-  // Job header card
+  // ── Job header card ─────────────────────────────────────────────
   const header = el('div', 'card marked');
   const totalPieces = (data.baths || []).reduce((s, b) => s + ((b.pieces || []).length), 0);
   header.innerHTML = `
     <div class="card-h">
       <h3 class="card-title">${escapeHtml(data.job?.name || 'Field measure')}</h3>
-      <span class="card-meta">field-measure intake · exact dims</span>
+      <span class="card-meta">field-measure · exact dims · editable</span>
     </div>
     <div style="font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 14px;">
       ${escapeHtml(data.job?.address || 'address not detected')}
       ${data.job?.measured_by ? ' · measured by ' + escapeHtml(data.job.measured_by) : ''}
     </div>
     <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-      <button class="btn primary sm" onclick="copyFieldMeasureAll()">Copy entire job as text</button>
-      <span class="card-meta">${(data.baths || []).length} bath${(data.baths || []).length === 1 ? '' : 's'} · ${totalPieces} piece${totalPieces === 1 ? '' : 's'} total</span>
+      <button class="btn primary sm" onclick="openCutList()">Open cut list</button>
+      <button class="btn ghost sm" onclick="copyFieldMeasureAll()">Copy all as text</button>
+      <span class="card-meta">${(data.baths || []).length} bath${(data.baths || []).length === 1 ? '' : 's'} · ${totalPieces} piece${totalPieces === 1 ? '' : 's'}</span>
     </div>
   `;
   wrap.appendChild(header);
 
-  // Per-bath cards
+  // ── Per-bath cards ──────────────────────────────────────────────
+  const FINISH_OPTIONS = ['Satin Brass', 'Brushed Nickel', 'Matte Black', 'Polished Chrome', 'Polished Nickel', 'Oil Rubbed Bronze', 'unknown'];
+  const ROLE_OPTIONS = [
+    ['shower-door', 'Shower door'],
+    ['shower-fixed-panel', 'Fixed panel'],
+    ['shower-return', 'Return panel'],
+    ['shower-header', 'Header'],
+    ['vanity-mirror', 'Vanity mirror'],
+    ['other-mirror', 'Other mirror'],
+    ['other', 'Other'],
+  ];
+
   (data.baths || []).forEach((b, idx) => {
     const c = el('div', 'card marked');
     c.style.marginTop = '14px';
 
-    const piecesHtml = (b.pieces || []).map(p => {
+    // Make sure this bath's finish lands in the dropdown — if extracted finish
+    // isn't one of our options, prepend it so the select reflects the original.
+    let finishOptions = FINISH_OPTIONS.slice();
+    if (b.finish && !finishOptions.includes(b.finish)) finishOptions.unshift(b.finish);
+    const finishOptHtml = finishOptions.map(f => `<option value="${escapeHtml(f)}" ${(b.finish === f) ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
+
+    const piecesHtml = (b.pieces || []).map((p, pi) => {
+      const roleOptHtml = ROLE_OPTIONS.map(([v, l]) => `<option value="${v}" ${p.role === v ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('');
       const expArr = p.exposed_edges || [];
-      const exposedTxt = expArr.length ? expArr.join(' + ') + ' polished' : 'no exposed';
-      const cutFlag = p.is_cut_size ? '' : ' <span style="color:var(--warning); font-size:10px; font-family:var(--mono);">(not circled)</span>';
-      const kindBadge = p.kind === 'mirror' ? 'MIR' : 'GLS';
+      const exposedTxt = expArr.length ? expArr.join(' + ') : 'none';
       return `<tr>
-        <td><strong style="font-family:var(--mono); font-size:11px;">${kindBadge}</strong> · ${escapeHtml(p.role || '?')}</td>
-        <td style="font-family:var(--mono); font-size:13px; white-space:nowrap;">${escapeHtml(p.width_in || '?')} × ${escapeHtml(p.height_in || '?')}${cutFlag}</td>
-        <td style="font-size:12px;">${escapeHtml(exposedTxt)}</td>
-        <td style="font-size:12px; color:var(--muted);">${escapeHtml(p.notes || '')}</td>
+        <td style="padding:6px 8px;">
+          <select onchange="updatePieceField(${idx}, ${pi}, 'kind', this.value)" style="font-size:12px; margin-bottom:3px; width:100%; padding:3px 4px; border:1px solid var(--hairline); border-radius:3px;">
+            <option value="glass" ${p.kind === 'glass' ? 'selected' : ''}>Glass</option>
+            <option value="mirror" ${p.kind === 'mirror' ? 'selected' : ''}>Mirror</option>
+          </select>
+          <select onchange="updatePieceField(${idx}, ${pi}, 'role', this.value)" style="font-size:12px; width:100%; padding:3px 4px; border:1px solid var(--hairline); border-radius:3px;">
+            ${roleOptHtml}
+          </select>
+        </td>
+        <td style="padding:6px 8px; white-space:nowrap;">
+          <input type="text" value="${escapeHtml(p.width_in || '')}" onblur="updatePieceField(${idx}, ${pi}, 'width_in', this.value)" style="width:62px; font-family:var(--mono); font-size:13px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="W"/>
+          <span style="opacity:0.4;">×</span>
+          <input type="text" value="${escapeHtml(p.height_in || '')}" onblur="updatePieceField(${idx}, ${pi}, 'height_in', this.value)" style="width:62px; font-family:var(--mono); font-size:13px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="H"/>
+          ${p.is_cut_size ? '' : '<div style="font-size:9px; color:var(--warning); font-family:var(--mono); margin-top:3px;">not circled</div>'}
+        </td>
+        <td style="padding:6px 8px; font-size:12px;">${escapeHtml(exposedTxt)}</td>
+        <td style="padding:6px 8px;">
+          <input type="text" value="${escapeHtml(p.notes || '')}" onblur="updatePieceField(${idx}, ${pi}, 'notes', this.value)" style="width:100%; font-size:12px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="—"/>
+        </td>
+        <td style="padding:6px 4px; text-align:center;">
+          <button onclick="removePieceFromBath(${idx}, ${pi})" style="background:transparent; border:1px solid var(--hairline); color:var(--muted); padding:2px 8px; font-size:14px; line-height:1; cursor:pointer; border-radius:3px;" title="Remove piece">×</button>
+        </td>
       </tr>`;
     }).join('');
 
     c.innerHTML = `
       <div class="card-h">
         <h3 class="card-title">${escapeHtml(b.name || 'Bath ' + (idx + 1))}</h3>
-        <span class="card-meta">${escapeHtml(b.finish || 'finish: unknown')}</span>
+        <select onchange="updateBathField(${idx}, 'finish', this.value)" style="font-size:12px; padding:5px 8px; border:1px solid var(--hairline); border-radius:4px; background:var(--paper);">
+          ${finishOptHtml}
+        </select>
       </div>
       ${b.bath_notes ? `<div style="font-size:13px; color:var(--muted); margin-bottom:10px; font-style:italic;">${escapeHtml(b.bath_notes)}</div>` : ''}
-      <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+      <div id="flowb-sketch-${idx}" style="margin-bottom:14px; padding:12px; background:#FAFAFA; border:1px dashed var(--hairline); border-radius:6px;">${buildFlowBSketchSVG(b.pieces || [])}</div>
+      <table style="width:100%; border-collapse:collapse;">
         <colgroup>
-          <col style="width:32%"><col style="width:24%"><col style="width:20%"><col style="width:24%">
+          <col style="width:24%"><col style="width:22%"><col style="width:14%"><col style="width:32%"><col style="width:8%">
         </colgroup>
         <thead>
           <tr style="border-bottom:1px solid var(--hairline); text-align:left;">
@@ -3851,16 +3890,20 @@ function renderFieldMeasurePanel() {
             <th style="padding:6px 8px; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Size (W × H)</th>
             <th style="padding:6px 8px; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Edges</th>
             <th style="padding:6px 8px; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Notes</th>
+            <th></th>
           </tr>
         </thead>
-        <tbody style="vertical-align:top;">${piecesHtml || '<tr><td colspan="4" style="padding:8px; color:var(--muted); font-style:italic;">No pieces extracted for this bath</td></tr>'}</tbody>
+        <tbody style="vertical-align:top;">${piecesHtml || '<tr><td colspan="5" style="padding:8px; color:var(--muted); font-style:italic;">No pieces — click "Add piece" to build manually</td></tr>'}</tbody>
       </table>
-      <button class="btn ghost sm" onclick="copyFieldMeasureBath(${idx})">Copy this bath as text</button>
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn ghost sm" onclick="addPieceToBath(${idx})">+ Add piece</button>
+        <button class="btn ghost sm" onclick="copyFieldMeasureBath(${idx})">Copy this bath</button>
+      </div>
     `;
     wrap.appendChild(c);
   });
 
-  // Uncertainty flags — clearly visible so Erika can verify before SG entry
+  // ── Uncertainty flags ───────────────────────────────────────────
   if (data.uncertainty_flags && data.uncertainty_flags.length) {
     const flags = el('div', 'card');
     flags.style.marginTop = '14px';
@@ -3879,6 +3922,136 @@ function renderFieldMeasurePanel() {
   }
 
   return wrap;
+}
+
+// 2D sketch of a bath's pieces — proportionally-scaled rectangles laid out
+// left-to-right in three groups: shower glass, header, mirrors. Re-renders
+// when the user edits a dimension.
+function buildFlowBSketchSVG(pieces) {
+  const parsed = (pieces || []).map(p => ({
+    ...p,
+    w: parseDimToInches(p.width_in),
+    h: parseDimToInches(p.height_in),
+  })).filter(p => p.w > 0 && p.h > 0);
+
+  if (!parsed.length) {
+    return '<div style="padding:14px; color:var(--muted); font-size:12px; font-style:italic; text-align:center;">No valid dimensions yet — fix W and H above to see the sketch</div>';
+  }
+
+  const showerGlass = parsed.filter(p => p.kind === 'glass' && (p.role || '').startsWith('shower-') && p.role !== 'shower-header');
+  const headers = parsed.filter(p => p.role === 'shower-header');
+  const mirrors = parsed.filter(p => p.kind === 'mirror' || (p.role || '').endsWith('mirror'));
+  const others = parsed.filter(p => !showerGlass.includes(p) && !headers.includes(p) && !mirrors.includes(p));
+
+  const groups = [];
+  if (showerGlass.length) groups.push({ label: 'Shower glass · elevation', items: showerGlass });
+  if (headers.length) groups.push({ label: 'Header', items: headers });
+  if (mirrors.length) groups.push({ label: 'Mirror' + (mirrors.length > 1 ? 's' : ''), items: mirrors });
+  if (others.length) groups.push({ label: 'Other', items: others });
+
+  const drawHeight = 150;
+  const maxH = Math.max(...parsed.map(p => p.h), 1);
+  const heightScale = drawHeight / maxH;
+
+  let out = '';
+  groups.forEach(g => {
+    const totalW = g.items.reduce((s, p) => s + p.w, 0);
+    const viewW = 720;
+    const padding = 36;
+    const gapBetween = 10;
+    const availableW = viewW - 2 * padding - gapBetween * Math.max(0, g.items.length - 1);
+    const widthScale = Math.min(availableW / totalW, heightScale);
+    const groupHeight = drawHeight + 50;
+
+    out += `<div style="margin-bottom:10px;">
+      <div style="font-family:var(--mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin-bottom:6px;">${escapeHtml(g.label)}</div>
+      <svg viewBox="0 0 ${viewW} ${groupHeight}" xmlns="http://www.w3.org/2000/svg" style="max-width:100%; height:auto; display:block;">`;
+
+    let xCursor = padding;
+    g.items.forEach(p => {
+      const w = p.w * widthScale;
+      const h = p.h * heightScale;
+      const x = xCursor;
+      const y = padding + (drawHeight - h);
+
+      const isMirror = p.kind === 'mirror' || (p.role || '').endsWith('mirror');
+      const fill = isMirror ? 'rgba(180,140,80,0.18)' : 'rgba(80,120,160,0.18)';
+      const stroke = isMirror ? '#7a5a2e' : '#1f3447';
+
+      out += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`;
+      out += `<text x="${x + w/2}" y="${y + h + 16}" text-anchor="middle" font-family="monospace" font-size="11" fill="#444">${escapeHtml(p.width_in)}"</text>`;
+      out += `<text x="${x - 4}" y="${y + h/2 + 4}" text-anchor="end" font-family="monospace" font-size="11" fill="#444">${escapeHtml(p.height_in)}"</text>`;
+
+      const roleShort = (p.role || '').replace('shower-', '').replace('-mirror', ' mir').replace('-panel', ' pnl').replace('vanity', 'vanity');
+      out += `<text x="${x + w/2}" y="${y + h/2 + 4}" text-anchor="middle" font-family="sans-serif" font-size="10" fill="${stroke}" opacity="0.7">${escapeHtml(roleShort)}</text>`;
+
+      xCursor += w + gapBetween;
+    });
+
+    out += '</svg></div>';
+  });
+
+  return out;
+}
+
+// Parse "47 1/4" / "47" / "47.25" / `47 1/4"` to a float number of inches.
+// Returns 0 for unparseable input so the caller can filter.
+function parseDimToInches(s) {
+  if (!s) return 0;
+  const str = String(s).trim().replace(/"/g, '');
+  const m = str.match(/^(\d+(?:\.\d+)?)\s*(?:(\d+)\s*\/\s*(\d+))?\s*$/);
+  if (!m) return 0;
+  const whole = parseFloat(m[1]) || 0;
+  const num = parseInt(m[2] || '0', 10);
+  const denom = parseInt(m[3] || '1', 10);
+  return whole + (denom ? num / denom : 0);
+}
+
+// Field-update handlers — bound to onblur/onchange in the rendered HTML.
+function updatePieceField(bathIdx, pieceIdx, field, value) {
+  const data = state.fieldMeasureData;
+  if (!data || !data.baths || !data.baths[bathIdx]) return;
+  const piece = data.baths[bathIdx].pieces && data.baths[bathIdx].pieces[pieceIdx];
+  if (!piece) return;
+  piece[field] = value;
+  // Treat any user-edited dimension as confirmed (cut size).
+  if ((field === 'width_in' || field === 'height_in') && value && !piece.is_cut_size) {
+    piece.is_cut_size = true;
+  }
+  // Refresh just the sketch for this bath when geometry/labelling changed.
+  if (field === 'width_in' || field === 'height_in' || field === 'kind' || field === 'role') {
+    const sketchEl = document.getElementById('flowb-sketch-' + bathIdx);
+    if (sketchEl) sketchEl.innerHTML = buildFlowBSketchSVG(data.baths[bathIdx].pieces);
+  }
+}
+
+function updateBathField(bathIdx, field, value) {
+  const data = state.fieldMeasureData;
+  if (!data || !data.baths || !data.baths[bathIdx]) return;
+  data.baths[bathIdx][field] = value;
+}
+
+function addPieceToBath(bathIdx) {
+  const data = state.fieldMeasureData;
+  if (!data || !data.baths || !data.baths[bathIdx]) return;
+  data.baths[bathIdx].pieces = data.baths[bathIdx].pieces || [];
+  data.baths[bathIdx].pieces.push({
+    kind: 'glass',
+    role: 'shower-fixed-panel',
+    width_in: '',
+    height_in: '',
+    is_cut_size: true,
+    exposed_edges: [],
+    notes: '',
+  });
+  renderReview();
+}
+
+function removePieceFromBath(bathIdx, pieceIdx) {
+  const data = state.fieldMeasureData;
+  if (!data || !data.baths || !data.baths[bathIdx] || !data.baths[bathIdx].pieces) return;
+  data.baths[bathIdx].pieces.splice(pieceIdx, 1);
+  renderReview();
 }
 
 function fieldMeasureBathToText(b) {
@@ -4176,10 +4349,221 @@ function renderFlagsOutput() {
 // Available from any step via the topbar "Cut list" button. Opens a fullscreen overlay
 // showing only the SG-shaped job tree(s) — high-density, monospaced, optimized for
 // reading while doing Smart Glazier data entry in another window.
+// Builds an SG-shaped cut list tree from flow-B field-measure data.
+// Inserts shop-standard hardware defaults (matches Beck inline-2 BOM) when a
+// shower door is present. Mirrors and other items render as their own blocks.
+function buildFlowBCutListHTML(data) {
+  const baths = data.baths || [];
+  if (!baths.length) {
+    return `<div class="cutlist-empty"><p>No baths extracted yet.</p><p class="muted">Re-run extraction or add pieces manually on the Review screen.</p></div>`;
+  }
+
+  let html = '';
+
+  baths.forEach(b => {
+    const finish = b.finish || 'finish unknown';
+    const pieces = b.pieces || [];
+
+    const showerGlass = pieces.filter(p => p.kind === 'glass' && (p.role || '').startsWith('shower-') && p.role !== 'shower-header');
+    const headers = pieces.filter(p => p.role === 'shower-header');
+    const mirrors = pieces.filter(p => p.kind === 'mirror' || (p.role || '').endsWith('mirror'));
+    const others = pieces.filter(p => !showerGlass.includes(p) && !headers.includes(p) && !mirrors.includes(p));
+
+    const hasDoor = showerGlass.some(p => p.role === 'shower-door');
+    const hasShower = showerGlass.length > 0 || headers.length > 0;
+
+    // ── Shower block (Supply and Install · finish) ────────────────
+    if (hasShower) {
+      let rows = '';
+
+      rows += `<tr>
+        <td><strong>Field Measure</strong><div class="cutlist-sub">on-site by Dion · photos on file</div></td>
+        <td class="cutlist-size">—</td>
+        <td class="cutlist-qty">1</td>
+        <td class="cutlist-notes">Exact dimensions</td>
+      </tr>`;
+
+      showerGlass.forEach(p => {
+        const expArr = p.exposed_edges || [];
+        const expTxt = expArr.length ? expArr.join('+') + ' polished' : 'no exposed';
+        rows += `<tr>
+          <td><strong>${escapeHtml(roleLabel(p.role))}</strong><div class="cutlist-sub">${escapeHtml(p.kind)}${p.notes ? ' · ' + escapeHtml(p.notes) : ''}${p.is_cut_size ? '' : ' · estimate'}</div></td>
+          <td class="cutlist-size">${escapeHtml(p.width_in || '?')}" × ${escapeHtml(p.height_in || '?')}"</td>
+          <td class="cutlist-qty">1</td>
+          <td class="cutlist-notes">${escapeHtml(expTxt)}</td>
+        </tr>`;
+      });
+
+      headers.forEach(p => {
+        rows += `<tr>
+          <td><strong>Header</strong><div class="cutlist-sub">P770WS stock · cut on site</div></td>
+          <td class="cutlist-size">cut to ${escapeHtml(p.width_in || '?')}"</td>
+          <td class="cutlist-qty">1</td>
+          <td class="cutlist-notes">${escapeHtml(p.notes || '')}</td>
+        </tr>`;
+      });
+
+      // Hardware defaults (shop standard for inline-2 frameless — Beck-confirmed)
+      if (hasDoor) {
+        rows += `<tr>
+          <td><strong>Hinges</strong></td>
+          <td></td>
+          <td class="cutlist-qty">2</td>
+          <td class="cutlist-notes">${escapeHtml(finish)} · V1E037</td>
+        </tr>`;
+        rows += `<tr>
+          <td><strong>Wall clamps</strong></td>
+          <td></td>
+          <td class="cutlist-qty">2</td>
+          <td class="cutlist-notes">${escapeHtml(finish)} · SGCU1 · 10" from top + 10" from bottom of fixed panel</td>
+        </tr>`;
+        rows += `<tr>
+          <td><strong>Handle</strong></td>
+          <td></td>
+          <td class="cutlist-qty">1</td>
+          <td class="cutlist-notes">${escapeHtml(finish)} · BM6X6</td>
+        </tr>`;
+      }
+
+      // Sundries
+      rows += `<tr>
+        <td><strong>Silicone</strong></td>
+        <td></td>
+        <td class="cutlist-qty">2</td>
+        <td class="cutlist-notes">tubes · clear</td>
+      </tr>`;
+
+      // Labor
+      const fabUnits = showerGlass.length * 2 + headers.length * 2 + (hasDoor ? 4 : 0);
+      rows += `<tr>
+        <td><strong>Factory Fabrication</strong></td>
+        <td></td>
+        <td class="cutlist-qty">${fabUnits}</td>
+        <td class="cutlist-notes">units</td>
+      </tr>`;
+      rows += `<tr>
+        <td><strong>Install</strong></td>
+        <td></td>
+        <td class="cutlist-qty">3</td>
+        <td class="cutlist-notes">units</td>
+      </tr>`;
+
+      const totalGlassQty = showerGlass.length + headers.length;
+      html += `
+        <div class="cutlist-block">
+          <div class="cutlist-block-h">
+            <span class="cutlist-block-loc">${escapeHtml((b.name || 'Bath').toUpperCase())}</span>
+            <span class="cutlist-block-title">Supply and Install · ${escapeHtml(finish)}</span>
+            <span class="cutlist-block-qty">× ${totalGlassQty}</span>
+          </div>
+          <table class="cutlist-table">
+            <colgroup>
+              <col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/>
+            </colgroup>
+            <thead>
+              <tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    // ── Mirror block ──────────────────────────────────────────────
+    if (mirrors.length) {
+      const mirrorRows = mirrors.map(p => `<tr>
+        <td><strong>${escapeHtml(roleLabel(p.role) || 'Mirror')}</strong>${p.is_cut_size ? '' : '<div class="cutlist-sub">estimate — verify</div>'}</td>
+        <td class="cutlist-size">${escapeHtml(p.width_in || '?')}" × ${escapeHtml(p.height_in || '?')}"</td>
+        <td class="cutlist-qty">1</td>
+        <td class="cutlist-notes">${escapeHtml(p.notes || '')}</td>
+      </tr>`).join('');
+
+      html += `
+        <div class="cutlist-block">
+          <div class="cutlist-block-h">
+            <span class="cutlist-block-loc">${escapeHtml((b.name || 'Bath').toUpperCase())}</span>
+            <span class="cutlist-block-title">Mirror${mirrors.length > 1 ? 's' : ''}</span>
+            <span class="cutlist-block-qty">× ${mirrors.length}</span>
+          </div>
+          <table class="cutlist-table">
+            <colgroup><col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/></colgroup>
+            <thead><tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr></thead>
+            <tbody>${mirrorRows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    // ── Other items block ─────────────────────────────────────────
+    if (others.length) {
+      const otherRows = others.map(p => `<tr>
+        <td><strong>${escapeHtml(roleLabel(p.role) || 'Other')}</strong><div class="cutlist-sub">${escapeHtml(p.kind)}</div></td>
+        <td class="cutlist-size">${escapeHtml(p.width_in || '?')}" × ${escapeHtml(p.height_in || '?')}"</td>
+        <td class="cutlist-qty">1</td>
+        <td class="cutlist-notes">${escapeHtml(p.notes || '')}</td>
+      </tr>`).join('');
+
+      html += `
+        <div class="cutlist-block">
+          <div class="cutlist-block-h">
+            <span class="cutlist-block-loc">${escapeHtml((b.name || 'Bath').toUpperCase())}</span>
+            <span class="cutlist-block-title">Other</span>
+            <span class="cutlist-block-qty">× ${others.length}</span>
+          </div>
+          <table class="cutlist-table">
+            <colgroup><col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/></colgroup>
+            <thead><tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr></thead>
+            <tbody>${otherRows}</tbody>
+          </table>
+        </div>`;
+    }
+  });
+
+  // ── Uncertainty flags ────────────────────────────────────────────
+  if (data.uncertainty_flags && data.uncertainty_flags.length) {
+    html += `
+      <div class="cutlist-block" style="background: rgba(184, 116, 43, 0.06); border: 1px solid rgba(184, 116, 43, 0.4);">
+        <div class="cutlist-block-h">
+          <span class="cutlist-block-loc" style="color: var(--warning);">VERIFY ON PHOTO</span>
+          <span class="cutlist-block-title">${data.uncertainty_flags.length} item${data.uncertainty_flags.length === 1 ? '' : 's'} flagged by extraction</span>
+        </div>
+        <ul style="margin: 0; padding: 12px 12px 14px 32px; font-size: 13px; line-height: 1.7;">
+          ${data.uncertainty_flags.map(f => '<li>' + escapeHtml(f) + '</li>').join('')}
+        </ul>
+      </div>`;
+  }
+
+  return html;
+}
+
+function roleLabel(role) {
+  const map = {
+    'shower-door': 'Shower door',
+    'shower-fixed-panel': 'Fixed panel',
+    'shower-return': 'Return panel',
+    'shower-header': 'Header',
+    'vanity-mirror': 'Vanity mirror',
+    'other-mirror': 'Mirror',
+    'other': 'Other',
+  };
+  return map[role] || role || '?';
+}
+
 function openCutList() {
   const overlay = $('#cutlist-overlay');
   const body = $('#cutlist-overlay-body');
   const jobEl = $('#cutlist-overlay-job');
+
+  // FLOW B — render from fieldMeasureData if present (no plans, hand-drawn intake).
+  // This bypasses the buildJobTree pipeline entirely and renders an SG-shaped tree
+  // directly from Dion's measurements with shop-standard hardware defaults.
+  if (state.fieldMeasureData) {
+    const data = state.fieldMeasureData;
+    const jobLine = [data.job?.name, data.job?.address, data.job?.measured_by ? 'measured by ' + data.job.measured_by : null]
+      .filter(Boolean).join(' · ');
+    jobEl.textContent = jobLine || 'Field measure';
+    body.innerHTML = buildFlowBCutListHTML(data);
+    overlay.classList.add('is-open');
+    return;
+  }
 
   const builder = BUILDERS.find(b => b.id === state.builder);
   const jobLine = [
