@@ -1810,6 +1810,10 @@ a { color: var(--navy); }
         <span class="label-mono">Path B</span>
         Homeowner direct
       </button>
+      <button data-mode="fieldmeasure">
+        <span class="label-mono">Path C</span>
+        Field measure (manual)
+      </button>
     </div>
 
     <!-- ====== Builder intake ====== -->
@@ -1956,6 +1960,35 @@ a { color: var(--navy); }
           <span class="tag" style="color: var(--warning); border-color: var(--warning);">Site visit always required</span>
           <span>— field measurement is the primary dimension source for homeowner-direct.</span>
         </div>
+      </div>
+    </div>
+
+    <!-- ====== Field measure (manual) intake — Path C ====== -->
+    <div id="intake-fieldmeasure" class="stack-lg" style="display:none;">
+      <div class="card marked">
+        <h2 class="card-title" style="margin-bottom: 10px;">Job header</h2>
+        <div class="grid grid-2">
+          <div class="field">
+            <label class="field-lbl">Job name</label>
+            <input class="field-input" id="fm-job-name" placeholder="e.g. Martyn Hammer Custom Homes" />
+          </div>
+          <div class="field">
+            <label class="field-lbl">Job address</label>
+            <input class="field-input" id="fm-job-address" placeholder="e.g. 3933 Cortez Dr, Dallas TX" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card marked">
+        <h2 class="card-title" style="margin-bottom: 10px;">Field measure entry</h2>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.55;">You'll add baths and pieces directly. Each bath picks a configuration (inline w/ door, no-door splash, mirror only, cabinet glass, custom) and the right hardware/labor BOM auto-fills. The cut list output mirrors Smart Glazier's line-item structure for fast paste-in. Vision OCR is not used on this path — the dimensions you type are the source of truth.</p>
+        <div class="dropzone" data-target="fm-photos">
+          <div class="dz-icon">◉</div>
+          <div class="dz-title">Upload Dion's sketch photos (optional)</div>
+          <div class="dz-hint">Stored for reference · not analyzed</div>
+          <input type="file" accept="image/*" multiple class="sr-only" />
+        </div>
+        <div class="dropzone-files" id="fm-photos-files"></div>
       </div>
     </div>
 
@@ -3171,7 +3204,11 @@ function updateCTA() {
   if (i === STEPS.length - 1) {
     next.textContent = 'Mark complete · start new';
   } else if (state.step === 'intake') {
-    next.textContent = state.extracting ? 'Extracting…' : 'Extract & continue →';
+    if (state.intakeMode === 'fieldmeasure') {
+      next.textContent = 'Start manual entry →';
+    } else {
+      next.textContent = state.extracting ? 'Extracting…' : 'Extract & continue →';
+    }
   } else {
     next.textContent = 'Continue →';
   }
@@ -3186,14 +3223,19 @@ $$('#intake-toggle button').forEach(btn => {
     state.intakeMode = btn.dataset.mode;
     $('#intake-builder').style.display = state.intakeMode === 'builder' ? '' : 'none';
     $('#intake-homeowner').style.display = state.intakeMode === 'homeowner' ? '' : 'none';
+    $('#intake-fieldmeasure').style.display = state.intakeMode === 'fieldmeasure' ? '' : 'none';
     if (state.intakeMode === 'homeowner') {
       // Auto-select Home Owner profile
       state.builder = 'home-owner';
       state.posture = 'neutral';
       state.decisionMaker = 'homeowner';
+    } else if (state.intakeMode === 'fieldmeasure') {
+      // Manual field-measure entry — no builder profile required up-front
+      state.builder = null;
     } else {
       state.builder = null;
     }
+    updateCTA();
   });
 });
 
@@ -3362,12 +3404,36 @@ function resetJob() {
   $$('#intake-toggle button').forEach(b => b.classList.toggle('is-active', b.dataset.mode === 'builder'));
   $('#intake-builder').style.display = '';
   $('#intake-homeowner').style.display = 'none';
+  if ($('#intake-fieldmeasure')) $('#intake-fieldmeasure').style.display = 'none';
+  if ($('#fm-job-name')) $('#fm-job-name').value = '';
+  if ($('#fm-job-address')) $('#fm-job-address').value = '';
+  if ($('#fm-photos-files')) $('#fm-photos-files').innerHTML = '';
   $('#builder-hint').textContent = 'Override anytime. Detection improves with each plan.';
   gotoStep('intake');
 }
 
 // =============== EXTRACTION ===============
 async function runExtraction() {
+  // Path C — Field measure (manual): skip vision entirely, just initialize
+  // empty fieldMeasureData and advance to the review screen where the user
+  // adds baths and pieces by hand. Photos are stored for reference only.
+  if (state.intakeMode === 'fieldmeasure') {
+    const jobName = ($('#fm-job-name')?.value || '').trim();
+    const jobAddress = ($('#fm-job-address')?.value || '').trim();
+    state.fieldMeasureData = state.fieldMeasureData || {
+      job: { name: jobName, address: jobAddress, measured_by: 'Dion' },
+      baths: [],
+      uncertainty_flags: [],
+    };
+    // Update job header from form fields each time (in case user edited)
+    state.fieldMeasureData.job.name = jobName || state.fieldMeasureData.job.name;
+    state.fieldMeasureData.job.address = jobAddress || state.fieldMeasureData.job.address;
+    if (jobAddress && !state.address) state.address = jobAddress;
+    applyExtraction({ bathrooms: [], otherItems: [], scaleStatus: null });
+    gotoStep('review');
+    return;
+  }
+
   if (state.intakeMode === 'builder' && state.planFiles.length === 0 && !state.builder) {
     alert('Upload a plan PDF, pick a builder, or upload field-measure photos before continuing.');
     return;
@@ -3875,17 +3941,22 @@ function renderFieldMeasurePanel() {
   const totalPieces = (data.baths || []).reduce((s, b) => s + ((b.pieces || []).length), 0);
   header.innerHTML = `
     <div class="card-h">
-      <h3 class="card-title">${escapeHtml(data.job?.name || 'Field measure')}</h3>
-      <span class="card-meta">field-measure · exact dims · editable</span>
+      <h3 class="card-title">Field measure entry</h3>
+      <span class="card-meta">${(data.baths || []).length} bath${(data.baths || []).length === 1 ? '' : 's'} · ${totalPieces} piece${totalPieces === 1 ? '' : 's'}</span>
     </div>
-    <div style="font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 14px;">
-      ${escapeHtml(data.job?.address || 'address not detected')}
-      ${data.job?.measured_by ? ' · measured by ' + escapeHtml(data.job.measured_by) : ''}
+    <div class="grid grid-2" style="margin-bottom:12px;">
+      <div class="field" style="margin-bottom:0;">
+        <label class="field-lbl">Job name</label>
+        <input class="field-input" value="${escapeHtml(data.job?.name || '')}" onblur="updateJobField('name', this.value)" placeholder="e.g. Martyn Hammer Custom Homes" />
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label class="field-lbl">Job address</label>
+        <input class="field-input" value="${escapeHtml(data.job?.address || '')}" onblur="updateJobField('address', this.value)" placeholder="e.g. 3933 Cortez Dr, Dallas TX" />
+      </div>
     </div>
     <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-      <button class="btn primary sm" onclick="openCutList()">Open cut list</button>
-      <button class="btn ghost sm" onclick="copyFieldMeasureAll()">Copy all as text</button>
-      <span class="card-meta">${(data.baths || []).length} bath${(data.baths || []).length === 1 ? '' : 's'} · ${totalPieces} piece${totalPieces === 1 ? '' : 's'}</span>
+      <button class="btn primary sm" onclick="openCutList()">Show cut list</button>
+      <button class="btn ghost sm" onclick="copyFieldMeasureAll()">Copy entire job as text</button>
     </div>
   `;
   wrap.appendChild(header);
@@ -3943,9 +4014,9 @@ function renderFieldMeasurePanel() {
           ${shapeBadge}
         </td>
         <td style="padding:6px 8px; white-space:nowrap;">
-          <input type="text" value="${escapeHtml(p.width_in || '')}" onblur="updatePieceField(${idx}, ${pi}, 'width_in', this.value)" style="width:62px; font-family:var(--mono); font-size:13px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="W"/>
+          <input type="text" value="${escapeHtml(p.width_in || '')}" data-piece-field="width_in" onblur="updatePieceField(${idx}, ${pi}, 'width_in', this.value)" style="width:62px; font-family:var(--mono); font-size:13px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="W"/>
           <span style="opacity:0.4;">×</span>
-          <input type="text" value="${escapeHtml(p.height_in || '')}" onblur="updatePieceField(${idx}, ${pi}, 'height_in', this.value)" style="width:62px; font-family:var(--mono); font-size:13px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="H"/>
+          <input type="text" value="${escapeHtml(p.height_in || '')}" data-piece-field="height_in" onblur="updatePieceField(${idx}, ${pi}, 'height_in', this.value)" style="width:62px; font-family:var(--mono); font-size:13px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="H"/>
           ${p.is_cut_size ? '' : '<div style="font-size:9px; color:var(--warning); font-family:var(--mono); margin-top:3px;">not circled</div>'}
           ${shape !== 'rect' ? '<div style="font-size:9px; color:var(--muted); font-family:var(--mono); margin-top:3px;">bounding</div>' : ''}
         </td>
@@ -3957,20 +4028,78 @@ function renderFieldMeasurePanel() {
           <button onclick="removePieceFromBath(${idx}, ${pi})" style="background:transparent; border:1px solid var(--hairline); color:var(--muted); padding:2px 8px; font-size:14px; line-height:1; cursor:pointer; border-radius:3px;" title="Remove piece">×</button>
         </td>
       </tr>`;
-      const shapeNotesRow = showShapeNotes ? `<tr>
-        <td colspan="5" style="padding:0 8px 10px 8px;">
-          <textarea onblur="updatePieceField(${idx}, ${pi}, 'shape_notes', this.value)" placeholder="${shape === 'irregular' ? 'Paste the dimension chain across the top + heights on the body. e.g. \\n  X chain: 17 1/2 + 25 1/2 + 17 1/2 + 2 1/8 + 17 1/2 + 25 1/16 + 17 1/2 + 1\\n  Y heights: 14 1/8, 23 1/8, 14 3/16, 13 3/16, 14 7/16, 23 1/8, 14, 13 3/8' : 'Site template required. Note any reference points or template instructions.'}" style="width:100%; font-size:11px; font-family:var(--mono); padding:6px 8px; border:1px solid var(--hairline); border-radius:3px; resize:vertical; min-height:60px;">${escapeHtml(p.shape_notes || '')}</textarea>
-        </td>
+      const segments = p.segments || [];
+      let irregularEditor = '';
+      if (shape === 'irregular') {
+        const segRows = segments.map((s, si) => `
+          <tr>
+            <td style="padding:4px 6px; font-family:var(--mono); font-size:11px; color:var(--muted); width:30px;">${si + 1}</td>
+            <td style="padding:4px 6px;">
+              <input type="text" value="${escapeHtml(s.width_in || '')}" onblur="updateSegmentField(${idx}, ${pi}, ${si}, 'width_in', this.value)" placeholder="W" style="width:80px; font-family:var(--mono); font-size:12px; padding:4px 6px; border:1px solid var(--hairline); border-radius:3px;"/>
+            </td>
+            <td style="padding:4px 6px;">
+              <input type="text" value="${escapeHtml(s.height_in || '')}" onblur="updateSegmentField(${idx}, ${pi}, ${si}, 'height_in', this.value)" placeholder="H" style="width:80px; font-family:var(--mono); font-size:12px; padding:4px 6px; border:1px solid var(--hairline); border-radius:3px;"/>
+            </td>
+            <td style="padding:4px 6px;">
+              <button onclick="removeSegment(${idx}, ${pi}, ${si})" style="background:transparent; border:1px solid var(--hairline); color:var(--muted); padding:2px 6px; font-size:12px; cursor:pointer; border-radius:3px;" title="Remove segment">×</button>
+            </td>
+          </tr>`).join('');
+        const vertexTableTxt = formatVertexTable(segments);
+        irregularEditor = `
+          <div style="padding:14px 14px 16px; background:rgba(80,120,160,0.04); border:1px solid rgba(80,120,160,0.18); border-radius:4px; margin-top:6px;">
+            <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start;">
+              <div style="flex:1; min-width:280px;">
+                <div style="font-size:12px; font-weight:600; color:var(--ink); margin-bottom:6px;">Segments — left to right across the piece:</div>
+                <table style="border-collapse:collapse;">
+                  <thead>
+                    <tr style="border-bottom:1px solid var(--hairline); text-align:left;">
+                      <th style="padding:3px 6px; font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">#</th>
+                      <th style="padding:3px 6px; font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Width</th>
+                      <th style="padding:3px 6px; font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500;">Height</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>${segRows || '<tr><td colspan="4" style="padding:6px; color:var(--muted); font-size:12px; font-style:italic;">No segments yet — add the first one to start the chain.</td></tr>'}</tbody>
+                </table>
+                <button class="btn ghost sm" onclick="addSegment(${idx}, ${pi})" style="margin-top:8px;">+ Add segment</button>
+              </div>
+              <div style="flex:1.4; min-width:300px;">
+                <div style="font-size:12px; font-weight:600; color:var(--ink); margin-bottom:6px;">Preview · ${segments.length} segment${segments.length === 1 ? '' : 's'}</div>
+                <div id="irreg-preview-${idx}-${pi}">${buildIrregularSVGPreview(segments)}</div>
+              </div>
+            </div>
+            <details style="margin-top:12px;">
+              <summary style="cursor:pointer; font-size:12px; font-weight:600; color:var(--ink);">Vertex coordinates (X, Y) — for fab</summary>
+              <pre id="irreg-vertices-${idx}-${pi}" style="font-family:var(--mono); font-size:11px; color:var(--ink); background:#FAFAFA; border:1px solid var(--hairline); border-radius:3px; padding:10px; margin:8px 0 0; white-space:pre; overflow-x:auto;">${escapeHtml(vertexTableTxt || '(add segments to compute vertices)')}</pre>
+            </details>
+          </div>
+        `;
+      } else if (shape === 'curved') {
+        // Curved pieces: keep the simple textarea — it's just a template note
+        irregularEditor = `
+          <div style="padding:10px 14px; background:rgba(184,116,43,0.04); border:1px solid rgba(184,116,43,0.25); border-radius:4px; margin-top:6px;">
+            <textarea onblur="updatePieceField(${idx}, ${pi}, 'shape_notes', this.value)" placeholder="Site template required — note any reference points or template instructions for fab." style="width:100%; font-size:12px; font-family:var(--mono); padding:6px 8px; border:1px solid var(--hairline); border-radius:3px; resize:vertical; min-height:50px;">${escapeHtml(p.shape_notes || '')}</textarea>
+          </div>
+        `;
+      }
+      const shapeNotesRow = (shape === 'irregular' || shape === 'curved') ? `<tr>
+        <td colspan="5" style="padding:0 8px 10px 8px;">${irregularEditor}</td>
       </tr>` : '';
-      return mainRow + shapeNotesRow;
+      return `<tr data-piece-idx="${pi}">${mainRow.replace(/^<tr>/, '').replace(/<\/tr>$/, '')}</tr>` + shapeNotesRow;
     }).join('');
 
     c.innerHTML = `
-      <div class="card-h">
-        <h3 class="card-title">${escapeHtml(b.name || 'Bath ' + (idx + 1))}</h3>
-        <select onchange="updateBathField(${idx}, 'finish', this.value)" style="font-size:12px; padding:5px 8px; border:1px solid var(--hairline); border-radius:4px; background:var(--paper);">
+      <div class="card-h" style="gap:10px; flex-wrap:wrap;">
+        <input type="text" value="${escapeHtml(b.name || 'Bath ' + (idx + 1))}" onblur="updateBathField(${idx}, 'name', this.value)" data-bath-field="name" style="flex:1; min-width:140px; font-size:18px; font-weight:600; padding:6px 10px; border:1px solid var(--hairline); border-radius:4px; background:var(--paper);" placeholder="Bath name (e.g. Master, Bath 2, Powder)" />
+        <select onchange="updateBathConfig(${idx}, this.value)" data-bath-field="config_hint" style="font-size:12px; padding:6px 10px; border:1px solid var(--hairline); border-radius:4px; background:var(--paper); min-width:180px;">
+          ${Object.entries(FLOWB_BOM_TEMPLATES).map(([k, v]) =>
+            `<option value="${k}" ${b.config_hint === k ? 'selected' : ''}>${escapeHtml(v.displayName || k)}</option>`
+          ).join('')}
+        </select>
+        <select onchange="updateBathField(${idx}, 'finish', this.value)" data-bath-field="finish" style="font-size:12px; padding:6px 10px; border:1px solid var(--hairline); border-radius:4px; background:var(--paper);">
           ${finishOptHtml}
         </select>
+        <button onclick="removeBath(${idx})" style="background:transparent; border:1px solid var(--hairline); color:var(--muted); padding:6px 10px; font-size:14px; cursor:pointer; border-radius:4px;" title="Remove bath">×</button>
       </div>
       ${b.bath_notes ? `<div style="font-size:13px; color:var(--muted); margin-bottom:10px; font-style:italic;">${escapeHtml(b.bath_notes)}</div>` : ''}
       <div id="flowb-sketch-${idx}" style="margin-bottom:14px; padding:12px; background:#FAFAFA; border:1px dashed var(--hairline); border-radius:6px;">${buildFlowBSketchSVG(b.pieces || [])}</div>
@@ -3991,11 +4120,29 @@ function renderFieldMeasurePanel() {
       </table>
       <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn ghost sm" onclick="addPieceToBath(${idx})">+ Add piece</button>
-        <button class="btn ghost sm" onclick="copyFieldMeasureBath(${idx})">Copy this bath</button>
+        <button class="btn ghost sm" onclick="copyFieldMeasureBath(${idx})">Copy SG block</button>
       </div>
     `;
+    c.setAttribute('data-bath-idx', String(idx));
     wrap.appendChild(c);
   });
+
+  // ── Add Bath toolbar ────────────────────────────────────────────
+  const addBar = el('div', 'card');
+  addBar.style.marginTop = '14px';
+  addBar.style.padding = '14px 16px';
+  addBar.style.background = 'rgba(80,120,160,0.04)';
+  addBar.style.borderStyle = 'dashed';
+  addBar.innerHTML = `
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <span style="font-size:13px; color:var(--muted); font-weight:500;">Add a bath:</span>
+      ${Object.entries(FLOWB_BOM_TEMPLATES).map(([k, v]) =>
+        `<button class="btn ghost sm" onclick="addBath('${k}')">+ ${escapeHtml(v.displayName || k)}</button>`
+      ).join('')}
+      ${(data.baths || []).length > 0 ? '<button class="btn ghost sm" onclick="cloneLastBath()" style="margin-left:6px; border-style:solid;">↻ Same as last bath</button>' : ''}
+    </div>
+  `;
+  wrap.appendChild(addBar);
 
   // ── Uncertainty flags ───────────────────────────────────────────
   if (data.uncertainty_flags && data.uncertainty_flags.length) {
@@ -4101,6 +4248,174 @@ function parseDimToInches(s) {
   return whole + (denom ? num / denom : 0);
 }
 
+// Inverse: convert a numeric inches value back to a clean glass-shop fraction string.
+// Rounds to the nearest 1/16" (the smallest denominator Eridion uses), reduces.
+// Examples: 17.5 → "17 1/2", 23.125 → "23 1/8", 14.1875 → "14 3/16", 17 → "17"
+function formatInches(value) {
+  if (typeof value !== 'number' || isNaN(value)) return '?';
+  const sign = value < 0 ? '-' : '';
+  value = Math.abs(value);
+  const wholePart = Math.floor(value);
+  const fractionalPart = value - wholePart;
+  let sixteenths = Math.round(fractionalPart * 16);
+  if (sixteenths === 0) return sign + String(wholePart);
+  if (sixteenths === 16) return sign + String(wholePart + 1);
+  // Reduce by GCD
+  let num = sixteenths, den = 16;
+  while (num % 2 === 0 && den % 2 === 0) { num /= 2; den /= 2; }
+  return sign + (wholePart > 0 ? wholePart + ' ' : '') + num + '/' + den;
+}
+
+// =============== IRREGULAR-SHAPE GEOMETRY (Flow C) ===============
+// For pieces with shape='irregular' — a single panel with a stepped silhouette.
+// User enters segments left-to-right, each with a width + height.
+// We assume baseline=0 (flat bottom), straight left/right edges, and segments
+// form a piecewise-constant top profile. The polygon vertices are computed
+// counterclockwise from bottom-left.
+
+function computeIrregularVertices(segments) {
+  if (!segments || !segments.length) return [];
+  const widths = segments.map(s => parseDimToInches(s.width_in) || 0);
+  const heights = segments.map(s => parseDimToInches(s.height_in) || 0);
+  const cumulativeX = [0];
+  for (let i = 0; i < widths.length; i++) cumulativeX.push(cumulativeX[i] + widths[i]);
+  const totalX = cumulativeX[widths.length];
+  const n = widths.length;
+
+  const vertices = [];
+  vertices.push({ x: 0, y: 0 });                        // bottom-left
+  vertices.push({ x: totalX, y: 0 });                   // bottom-right
+  vertices.push({ x: totalX, y: heights[n - 1] });      // top-right (height of last segment)
+  // Walk leftward across the top, dropping a vertex at each segment boundary
+  for (let i = n - 1; i >= 1; i--) {
+    vertices.push({ x: cumulativeX[i], y: heights[i] });     // before the step
+    vertices.push({ x: cumulativeX[i], y: heights[i - 1] }); // after the step
+  }
+  vertices.push({ x: 0, y: heights[0] });               // top-left (height of first segment)
+  return vertices;
+}
+
+// Build an SVG preview of the polygon with vertex dots and overall bounding labels.
+function buildIrregularSVGPreview(segments) {
+  const vertices = computeIrregularVertices(segments);
+  if (!vertices.length) {
+    return '<div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">Add at least one segment to see a preview.</div>';
+  }
+  const widths = segments.map(s => parseDimToInches(s.width_in) || 0);
+  const heights = segments.map(s => parseDimToInches(s.height_in) || 0);
+  const totalW = widths.reduce((a, b) => a + b, 0);
+  const maxH = Math.max(...heights, 0);
+
+  if (totalW <= 0 || maxH <= 0) {
+    return '<div style="padding:14px; text-align:center; color:var(--muted); font-size:12px; font-style:italic;">Fill in widths and heights to see a preview.</div>';
+  }
+
+  const targetW = 600;
+  const padding = 30;
+  const labelMargin = 22;
+  const scale = Math.min((targetW - 2 * padding) / totalW, 200 / maxH);
+  const drawW = totalW * scale;
+  const drawH = maxH * scale;
+  const svgW = drawW + 2 * padding;
+  const svgH = drawH + 2 * padding + labelMargin;
+
+  // Polygon points: SVG y grows downward, so flip the y axis
+  const pts = vertices.map(v =>
+    `${(v.x * scale + padding).toFixed(1)},${(svgH - v.y * scale - padding - labelMargin).toFixed(1)}`
+  ).join(' ');
+
+  // Vertex dots
+  const dots = vertices.map(v =>
+    `<circle cx="${(v.x * scale + padding).toFixed(1)}" cy="${(svgH - v.y * scale - padding - labelMargin).toFixed(1)}" r="2.5" fill="#1f3447"/>`
+  ).join('');
+
+  // Bounding-width label across bottom
+  const bottomY = svgH - padding - labelMargin + 14;
+  const widthLabel = `<text x="${(svgW / 2).toFixed(1)}" y="${bottomY.toFixed(1)}" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#666">${escapeHtml(formatInches(totalW))}" wide</text>`;
+
+  // Bounding-height label on right
+  const rightX = svgW - 4;
+  const middleY = svgH - drawH / 2 - padding - labelMargin;
+  const heightLabel = `<text x="${rightX.toFixed(1)}" y="${middleY.toFixed(1)}" text-anchor="end" font-family="ui-monospace, monospace" font-size="11" fill="#666">${escapeHtml(formatInches(maxH))}" tall</text>`;
+
+  return `<svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%; height:auto; max-height:240px; background:#FAFAFA; border:1px dashed var(--hairline); border-radius:4px;">
+    <polygon points="${pts}" fill="rgba(80,120,160,0.18)" stroke="#1f3447" stroke-width="1.5"/>
+    ${dots}
+    ${widthLabel}
+    ${heightLabel}
+  </svg>`;
+}
+
+// Format the vertex list as a clean monospace table for display + copy.
+function formatVertexTable(segments) {
+  const vertices = computeIrregularVertices(segments);
+  if (!vertices.length) return '';
+  const widths = segments.map(s => parseDimToInches(s.width_in) || 0);
+  const totalW = widths.reduce((a, b) => a + b, 0);
+  const heights = segments.map(s => parseDimToInches(s.height_in) || 0);
+  const maxH = Math.max(...heights, 0);
+
+  let txt = `Bounding: ${formatInches(totalW)}" × ${formatInches(maxH)}"\n`;
+  txt += `${vertices.length} vertices (counterclockwise from bottom-left):\n\n`;
+  txt += `  #    X            Y\n`;
+  txt += `  ──   ─────────    ─────────\n`;
+  vertices.forEach((v, i) => {
+    const num = String(i + 1).padStart(2, ' ');
+    const xs = (formatInches(v.x) + '"').padEnd(10, ' ');
+    const ys = formatInches(v.y) + '"';
+    txt += `  ${num}   ${xs}   ${ys}\n`;
+  });
+  return txt;
+}
+
+// Segment edit handlers
+function addSegment(bathIdx, pieceIdx) {
+  const data = state.fieldMeasureData;
+  const piece = data?.baths?.[bathIdx]?.pieces?.[pieceIdx];
+  if (!piece) return;
+  piece.segments = piece.segments || [];
+  piece.segments.push({ width_in: '', height_in: '' });
+  // Sync the piece's bounding W/H with the new total
+  recomputeBounds(piece);
+  renderReview();
+}
+function removeSegment(bathIdx, pieceIdx, segIdx) {
+  const data = state.fieldMeasureData;
+  const piece = data?.baths?.[bathIdx]?.pieces?.[pieceIdx];
+  if (!piece || !piece.segments) return;
+  piece.segments.splice(segIdx, 1);
+  recomputeBounds(piece);
+  renderReview();
+}
+function updateSegmentField(bathIdx, pieceIdx, segIdx, field, value) {
+  const data = state.fieldMeasureData;
+  const piece = data?.baths?.[bathIdx]?.pieces?.[pieceIdx];
+  if (!piece || !piece.segments || !piece.segments[segIdx]) return;
+  piece.segments[segIdx][field] = value;
+  recomputeBounds(piece);
+  // Surgical refresh: just the SVG preview + vertex table for this piece
+  const previewEl = document.getElementById(`irreg-preview-${bathIdx}-${pieceIdx}`);
+  if (previewEl) previewEl.innerHTML = buildIrregularSVGPreview(piece.segments);
+  const vtxEl = document.getElementById(`irreg-vertices-${bathIdx}-${pieceIdx}`);
+  if (vtxEl) vtxEl.textContent = formatVertexTable(piece.segments);
+  // Also refresh the piece row's bounding W/H badge text (cheaper than full re-render)
+  const wInput = document.querySelector(`[data-bath-idx="${bathIdx}"] tr[data-piece-idx="${pieceIdx}"] input[data-piece-field="width_in"]`);
+  const hInput = document.querySelector(`[data-bath-idx="${bathIdx}"] tr[data-piece-idx="${pieceIdx}"] input[data-piece-field="height_in"]`);
+  if (wInput) wInput.value = piece.width_in || '';
+  if (hInput) hInput.value = piece.height_in || '';
+}
+
+// Sync a piece's bounding width_in / height_in with the segment totals
+function recomputeBounds(piece) {
+  if (!piece.segments || !piece.segments.length) return;
+  const widths = piece.segments.map(s => parseDimToInches(s.width_in) || 0);
+  const heights = piece.segments.map(s => parseDimToInches(s.height_in) || 0);
+  const totalW = widths.reduce((a, b) => a + b, 0);
+  const maxH = Math.max(...heights, 0);
+  if (totalW > 0) piece.width_in = formatInches(totalW);
+  if (maxH > 0) piece.height_in = formatInches(maxH);
+}
+
 // Field-update handlers — bound to onblur/onchange in the rendered HTML.
 function updatePieceField(bathIdx, pieceIdx, field, value) {
   const data = state.fieldMeasureData;
@@ -4134,6 +4449,111 @@ function updateBathField(bathIdx, field, value) {
   data.baths[bathIdx][field] = value;
 }
 
+// Update job-level header fields (name, address, measured_by)
+function updateJobField(field, value) {
+  ensureFieldMeasureData();
+  state.fieldMeasureData.job = state.fieldMeasureData.job || {};
+  state.fieldMeasureData.job[field] = value;
+  if (field === 'address') state.address = value;
+}
+
+// Add a new empty bath at the end of the list with a chosen config.
+// Pre-populates pieces from the config's defaultPieces() template.
+function addBath(configKey) {
+  ensureFieldMeasureData();
+  const data = state.fieldMeasureData;
+  const baths = data.baths;
+  const idx = baths.length;
+
+  const cfg = configKey || 'inline-2-with-door';
+  const tmpl = FLOWB_BOM_TEMPLATES[cfg];
+
+  // Sensible default name: "Bath 2", "Bath 3", ... with "Master" reserved for first
+  const defaultName = idx === 0 ? 'Master' : ('Bath ' + (idx + 1));
+
+  // Inherit finish from previous bath if any
+  const prevFinish = idx > 0 ? baths[idx - 1].finish : 'Satin Brass';
+
+  const newBath = {
+    name: defaultName,
+    finish: prevFinish || 'Satin Brass',
+    config_hint: cfg,
+    pieces: tmpl ? tmpl.defaultPieces() : [],
+    bath_notes: '',
+  };
+
+  baths.push(newBath);
+  renderReview();
+
+  // Scroll to and focus the first empty piece's width input
+  setTimeout(() => {
+    const firstEmpty = document.querySelector(`[data-bath-idx="${idx}"] input[data-piece-field="width_in"]`);
+    if (firstEmpty) {
+      firstEmpty.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      firstEmpty.focus();
+    }
+  }, 50);
+}
+
+// Clone the previous bath's config + finish into a new bath, blank pieces.
+function cloneLastBath() {
+  ensureFieldMeasureData();
+  const data = state.fieldMeasureData;
+  if (!data.baths.length) {
+    addBath('inline-2-with-door');
+    return;
+  }
+  const last = data.baths[data.baths.length - 1];
+  addBath(last.config_hint || 'inline-2-with-door');
+  // Inherit finish from the cloned bath explicitly
+  const idx = data.baths.length - 1;
+  data.baths[idx].finish = last.finish || 'Satin Brass';
+  renderReview();
+}
+
+// Swap the bath's config and replace pieces with template defaults.
+// Confirms before destroying any pieces that have data.
+function updateBathConfig(bathIdx, newConfig) {
+  const data = state.fieldMeasureData;
+  if (!data || !data.baths || !data.baths[bathIdx]) return;
+  const bath = data.baths[bathIdx];
+  if (bath.config_hint === newConfig) return;
+  const hasData = (bath.pieces || []).some(p => p.width_in || p.height_in);
+  if (hasData) {
+    if (!confirm('Switching configurations will replace the pieces in this bath with the new template defaults. Pieces with dimensions will be lost. Continue?')) {
+      // Revert dropdown UI
+      const sel = document.querySelector(`[data-bath-idx="${bathIdx}"] [data-bath-field="config_hint"]`);
+      if (sel) sel.value = bath.config_hint || 'inline-2-with-door';
+      return;
+    }
+  }
+  bath.config_hint = newConfig;
+  const tmpl = FLOWB_BOM_TEMPLATES[newConfig];
+  bath.pieces = tmpl ? tmpl.defaultPieces() : [];
+  renderReview();
+}
+
+// Remove an entire bath (with confirmation).
+function removeBath(bathIdx) {
+  const data = state.fieldMeasureData;
+  if (!data || !data.baths || !data.baths[bathIdx]) return;
+  if (!confirm(`Remove "${data.baths[bathIdx].name || 'Bath ' + (bathIdx+1)}" and all its pieces?`)) return;
+  data.baths.splice(bathIdx, 1);
+  renderReview();
+}
+
+// Ensure state.fieldMeasureData is initialized — used when a manual-entry user
+// arrives at the review screen before having explicitly clicked "Start manual entry".
+function ensureFieldMeasureData() {
+  if (!state.fieldMeasureData) {
+    state.fieldMeasureData = {
+      job: { name: '', address: state.address || '', measured_by: 'Dion' },
+      baths: [],
+      uncertainty_flags: [],
+    };
+  }
+}
+
 function addPieceToBath(bathIdx) {
   const data = state.fieldMeasureData;
   if (!data || !data.baths || !data.baths[bathIdx]) return;
@@ -4149,6 +4569,7 @@ function addPieceToBath(bathIdx) {
     shape_notes: '',
     needs_template: false,
     notes: '',
+    segments: [],
   });
   renderReview();
 }
@@ -4162,14 +4583,75 @@ function removePieceFromBath(bathIdx, pieceIdx) {
 
 function fieldMeasureBathToText(b) {
   const lines = [];
-  lines.push(`${(b.name || 'Bath').toUpperCase()} — ${b.finish || 'finish unknown'}`);
+  const finish = b.finish || 'finish unknown';
+  const template = detectBOMTemplate(b);
+  lines.push(`${(b.name || 'Bath').toUpperCase()} — ${finish}`);
+  lines.push(`  ${template.name}`);
   if (b.bath_notes) lines.push('  Notes: ' + b.bath_notes);
+  lines.push('');
+
+  // Pieces
   (b.pieces || []).forEach(p => {
     const exp = (p.exposed_edges || []).length ? ' · ' + p.exposed_edges.join('+') + ' polished' : '';
     const cs = p.is_cut_size ? '' : ' (not circled — verify)';
     const notes = p.notes ? ' · ' + p.notes : '';
-    lines.push(`  ${p.kind} ${p.role}: ${p.width_in} × ${p.height_in}${cs}${exp}${notes}`);
+    const shapeTag =
+      p.shape === 'curved' || p.needs_template ? ' [NEEDS SITE TEMPLATE]'
+      : p.shape === 'irregular' ? ' [IRREGULAR]'
+      : '';
+    lines.push(`  • ${roleLabel(p.role)}: ${p.width_in || '?'} × ${p.height_in || '?'}${shapeTag}${cs}${exp}${notes}`);
+
+    // Surface vertex table for irregular pieces with segments
+    if (p.shape === 'irregular' && p.segments && p.segments.length) {
+      const vtxTxt = formatVertexTable(p.segments);
+      if (vtxTxt) {
+        vtxTxt.split('\n').forEach(ln => lines.push('      ' + ln));
+      }
+    } else if ((p.shape === 'irregular' || p.shape === 'curved') && p.shape_notes) {
+      p.shape_notes.split('\n').forEach(ln => lines.push('      ' + ln));
+    }
   });
+
+  // Hardware (from template)
+  const hwRows = template.hardware(finish);
+  if (hwRows.length) {
+    lines.push('');
+    lines.push('  Hardware:');
+    hwRows.forEach(hw => {
+      lines.push(`    · ${hw.qty}× ${hw.label}${hw.notes ? '  (' + hw.notes + ')' : ''}`);
+    });
+  }
+
+  // Sundries
+  const sundryRows = template.sundries();
+  if (sundryRows.length) {
+    lines.push('');
+    lines.push('  Sundries:');
+    sundryRows.forEach(s => {
+      lines.push(`    · ${s.qty}× ${s.label}${s.notes ? '  (' + s.notes + ')' : ''}`);
+    });
+  }
+
+  // Header (if applicable)
+  if (template.needsHeader) {
+    const showerGlass = (b.pieces || []).filter(p => p.kind === 'glass' && (p.role || '').startsWith('shower-') && p.role !== 'shower-header');
+    let maxW = 0;
+    showerGlass.forEach(p => {
+      const w = parseDimToInches(p.width_in);
+      if (w > maxW) maxW = w;
+    });
+    lines.push('');
+    lines.push(`  Header: P770WS 98" stock · ${maxW > 0 ? 'cut to ' + formatInches(maxW) + '"' : 'cut on site'} · PVC seal and wipe`);
+  }
+
+  // Labor
+  const cutPieces = (b.pieces || []).filter(p => p.kind === 'glass' && (p.role || '').startsWith('shower-') && p.role !== 'shower-header');
+  const fabUnits = cutPieces.length * (template.fabUnitsPerGlass || 0);
+  if (fabUnits > 0) {
+    lines.push('');
+    lines.push(`  Factory Fabrication: ${fabUnits} units`);
+  }
+  lines.push(`  Install: ${template.installUnits} ${template.installUnits > 1 ? 'units' : 'unit'}`);
   return lines.join('\n');
 }
 
@@ -4464,14 +4946,36 @@ function renderFlagsOutput() {
 // matching template, which then generates rows. Adding a new config is
 // scoped to adding one entry here — no other code needs to change.
 
+// Helper: make a blank piece with the given role/kind, sensible defaults
+function makeBlankPiece(kind, role) {
+  return {
+    kind: kind || 'glass',
+    role: role || 'shower-fixed-panel',
+    shape: 'rect',
+    width_in: '',
+    height_in: '',
+    is_cut_size: true, // assume manually-entered values are confirmed cut sizes
+    exposed_edges: [],
+    shape_notes: '',
+    needs_template: false,
+    notes: '',
+    segments: [], // for irregular shapes
+  };
+}
+
 const FLOWB_BOM_TEMPLATES = {
   'inline-2-with-door': {
+    displayName: 'Inline shower w/ door',
     name: 'Supply and Install · Inline shower w/ door',
     matches: (pieces) => {
       const hasDoor = pieces.some(p => p.role === 'shower-door');
       const hasFixed = pieces.some(p => p.role === 'shower-fixed-panel');
       return hasDoor && hasFixed;
     },
+    defaultPieces: () => [
+      makeBlankPiece('glass', 'shower-door'),
+      makeBlankPiece('glass', 'shower-fixed-panel'),
+    ],
     hardware: (finish) => [
       { label: 'Hinges',     qty: 2, notes: finish + ' · V1E037 Vienna Wall Mount Hinge' },
       { label: 'Wall clamps',qty: 2, notes: finish + ' · SGCU1 Heavy Duty Square Wall Clamp · 10" from top + 10" from bottom of fixed panel' },
@@ -4483,6 +4987,7 @@ const FLOWB_BOM_TEMPLATES = {
     installUnits: 3,
   },
   'inline-2-no-door': {
+    displayName: 'Inline splash (no door)',
     name: 'Supply and Install · Inline splash (no door)',
     matches: (pieces) => {
       const showerGlass = pieces.filter(p => p.kind === 'glass' && (p.role || '').startsWith('shower-') && p.role !== 'shower-header');
@@ -4494,6 +4999,10 @@ const FLOWB_BOM_TEMPLATES = {
       });
       return !hasDoor && (allShortish || showerGlass.some(p => p.role === 'shower-fixed-splash'));
     },
+    defaultPieces: () => [
+      makeBlankPiece('glass', 'shower-fixed-splash'),
+      makeBlankPiece('glass', 'shower-fixed-splash'),
+    ],
     hardware: (finish) => [
       { label: 'Wall clamps',  qty: 4, notes: finish + ' · BCU4 Beveled Wall Mount Clamp' },
       { label: 'Corner clamp', qty: 1, notes: finish + ' · S0GC90 90° Slip-over Clamp' },
@@ -4504,12 +5013,16 @@ const FLOWB_BOM_TEMPLATES = {
     installUnits: 2,
   },
   'mirror-only': {
+    displayName: 'Mirror only',
     name: 'Supply & Install of Mirror(s)',
     matches: (pieces) => {
       const hasShower = pieces.some(p => p.kind === 'glass' && (p.role || '').startsWith('shower-'));
       const hasMirror = pieces.some(p => p.kind === 'mirror' || (p.role || '').endsWith('mirror'));
       return !hasShower && hasMirror;
     },
+    defaultPieces: () => [
+      makeBlankPiece('mirror', 'vanity-mirror'),
+    ],
     hardware: (finish) => [
       { label: 'Standoffs', qty: 2, notes: finish + ' · D636' },
     ],
@@ -4523,12 +5036,16 @@ const FLOWB_BOM_TEMPLATES = {
     installLabel: '1 Hour Install & Measure',
   },
   'cabinet-glass': {
+    displayName: 'Cabinet glass (reeded)',
     name: 'Supply and Install · Cabinet Glass',
     matches: (pieces) => {
       const hasCabinet = pieces.some(p => p.role === 'cabinet-glass' || (p.notes || '').toLowerCase().includes('reeded') || (p.notes || '').toLowerCase().includes('cabinet'));
       const hasShower = pieces.some(p => p.kind === 'glass' && (p.role || '').startsWith('shower-'));
       return hasCabinet && !hasShower;
     },
+    defaultPieces: () => [
+      makeBlankPiece('glass', 'cabinet-glass'),
+    ],
     hardware: () => [],
     needsHeader: false,
     sundries: () => [{ label: 'Silicone', qty: 1, notes: 'tube' }],
@@ -4537,8 +5054,10 @@ const FLOWB_BOM_TEMPLATES = {
     installLabel: '1 Hour Install and measure cabinet inserts/shelves',
   },
   'other': {
+    displayName: 'Custom (no template)',
     name: 'Supply and Install · Custom configuration',
     matches: () => true,
+    defaultPieces: () => [],
     hardware: () => [],
     needsHeader: false,
     sundries: () => [{ label: 'Silicone', qty: 2, notes: 'tubes' }],
@@ -4606,7 +5125,13 @@ function buildFlowBCutListHTML(data) {
 
         rows += '<tr><td><strong>' + escapeHtml(roleLabel(p.role)) + '</strong><div class="cutlist-sub">' + subline + '</div></td><td class="cutlist-size">' + sizeStr + '</td><td class="cutlist-qty">1</td><td class="cutlist-notes">' + escapeHtml(noteParts.join(' · ')) + '</td></tr>';
 
-        if (p.shape === 'irregular' && p.shape_notes) {
+        // Surface computed (X,Y) vertex table for irregular pieces with segments
+        if (p.shape === 'irregular' && p.segments && p.segments.length) {
+          const vtxTxt = formatVertexTable(p.segments);
+          if (vtxTxt) {
+            rows += '<tr><td colspan="4" style="background:rgba(80,120,160,0.05); padding:10px 14px; font-family:var(--mono); font-size:11px; color:var(--ink); white-space:pre; overflow-x:auto;">' + escapeHtml(vtxTxt) + '</td></tr>';
+          }
+        } else if (p.shape === 'irregular' && p.shape_notes) {
           rows += '<tr><td colspan="4" style="background:rgba(80,120,160,0.05); padding:8px 12px; font-family:var(--mono); font-size:11px; color:var(--muted); white-space:pre-wrap;">' + escapeHtml(p.shape_notes) + '</td></tr>';
         }
         if (p.shape === 'curved' && p.shape_notes) {
