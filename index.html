@@ -3510,18 +3510,26 @@ THE FORM has these fixed elements:
 - A blank Site Plan area where the glazier sketches
 - Bottom legend: "X = Exposed Edges"
 
-Note: photos may be ROTATED. The form is landscape; some photos may have been taken sideways. Mentally rotate as needed.
+ORIENTATION: Photos may be rotated 90°/180°/270° from upright. ALWAYS find the Eridion logo first — it tells you which way is up. Then read everything in that orientation. Don't try to read sideways text.
 
 DION'S CONVENTIONS:
-- Each rectangle in the Site Plan area is either a glass panel or a mirror.
-- Mirrors are usually labeled with "M" inside the rectangle.
-- Numbers along rectangle edges are dimensions IN INCHES — whole numbers ("42") or fractions ("47 1/4", "23 5/8", "38 5/8", "77 3/4", "55 7/16").
-- A CIRCLED number indicates the actual cut size — the fabrication dimension. If both circled and uncircled values appear for the same edge, prefer the CIRCLED value.
+- Each rectangle in the Site Plan area is either a glass panel or a mirror. Mirrors are usually labeled "M" or "m" inside.
+- Numbers along rectangle edges are dimensions IN INCHES — whole ("42") or fractions ("47 1/4", "23 5/8", "55 9/16", "50 13/16"). Common denominators: /2, /4, /8, /16. Be very careful distinguishing 5/16 from 3/16 from 5/8 from 3/8 — flag any uncertainty.
+- A CIRCLED number is the cut size — the actual fab dimension. If both circled and uncircled values appear for the same edge, prefer the CIRCLED one.
 - "X" near an edge means that edge is exposed and needs to be polished.
-- Bath labels written near sections identify which bathroom: "Master", "Bath 2", "Bath 3", "Bath 4", "Bath 5", "Powder", "Jack & Jill", etc.
-- Hardware finish written per bath: "Sati-Brass" or "SB" = Satin Brass; "BN" = Brushed Nickel; "MB" = Matte Black; "PC" = Polished Chrome.
-- Cross-outs (numbers struck through) indicate revisions. Use the un-crossed value, ignore the crossed-out one.
-- Multiple baths often appear on one sheet. Multiple sheets often cover one job — synthesize across all photos.
+- Small notch marks on a panel's inside edge indicate hardware locations. Two notches close together on one edge = hinge side (door). Single notches at top and bottom of a panel = wall clamp positions.
+- Bath labels are usually written in cursive at the BOTTOM of each section: "Master", "Primary Bath", "Bath 2", "Bath 3", "Bath 4", "Bath 5", "Powder". Multiple baths often share one sheet — associate each rectangle with the closest bath label below it.
+- Hardware finish: "Sati-Brass" / "SB" = Satin Brass; "BN" = Brushed Nickel; "MB" = Matte Black; "PC" = Polished Chrome.
+- Cross-outs (numbers struck through) are old/wrong values — use the un-crossed value.
+- Free-form text-only items (no rectangle drawn) are valid pieces. e.g. "6 + 11×41" means six pieces at 11"×41". Common for cabinet inserts.
+
+CONFIGURATION PATTERNS (for assigning correct config_hint and roles):
+- INLINE-2 WITH DOOR: one tall narrow rectangle (~24" wide × 79"-83" tall) with two hinge notches close together on one long edge = the door. One shorter wider rectangle beside it with single wall-clamp notches at top and bottom = the fixed panel.
+- INLINE-2 NO-DOOR (splash): two panels of similar height (often shorter, 48"-54" tall) meeting at a corner, with wall-clamp notches but NO hinge marks and NO door. Common for splash guards over freestanding tubs. Hardware: BCU4 wall clamps + S0GC90 corner clamp.
+- MIRROR-ONLY: bath has only "M"-labeled rectangles, no shower glass.
+- CABINET GLASS: text notes only, no rectangles. e.g. "6+11×41 reeded" or "2+18×42".
+- IRREGULAR SHAPE: single piece with stepped/notched profile. Long horizontal dimension chain across the top ("17 1/2 + 25 1/2 + 17 1/2 + 2 1/8 + ...") and multiple vertical heights along the body. Treat as ONE piece; capture bounding W/H plus the full dimension chain in shape_notes.
+- CURVED: piece with curved outline. Treat as bounding rectangle with shape='curved' and needs_template=true.
 
 Return JSON ONLY (no markdown fences, no prose). Structure exactly:
 
@@ -3535,14 +3543,18 @@ Return JSON ONLY (no markdown fences, no prose). Structure exactly:
     {
       "name": "Master",
       "finish": "Satin Brass",
+      "config_hint": "inline-2-with-door",
       "pieces": [
         {
           "kind": "glass",
           "role": "shower-door",
-          "width_in": "47 1/4",
-          "height_in": "78",
+          "shape": "rect",
+          "width_in": "24",
+          "height_in": "83",
           "is_cut_size": true,
           "exposed_edges": ["top", "left"],
+          "shape_notes": "",
+          "needs_template": false,
           "notes": ""
         }
       ],
@@ -3550,17 +3562,22 @@ Return JSON ONLY (no markdown fences, no prose). Structure exactly:
     }
   ],
   "uncertainty_flags": [
-    "List specific things you're uncertain about: hard-to-read fractions, ambiguous bath assignments, illegible notes. Each item should be specific enough that a human can verify on the photo."
+    "List specific things you're uncertain about: hard-to-read fractions, ambiguous bath assignments, illegible notes. Be specific enough that a human can verify on the photo."
   ]
 }
 
 Rules:
 - "kind" is "glass" or "mirror"
-- "role" is one of: "shower-door", "shower-fixed-panel", "shower-header", "shower-return", "vanity-mirror", "other-mirror", "other"
-- Keep fractions as strings exactly as written (e.g. "47 1/4", not "47.25")
-- "is_cut_size" is true when the dimensions came from circled values, false otherwise
-- "exposed_edges" is an array containing any of: "top", "bottom", "left", "right". Empty array if none marked.
-- Be CONSERVATIVE with uncertainty_flags — better to flag than to guess wrong on dimensions.`;
+- "role" is one of: "shower-door", "shower-fixed-panel", "shower-fixed-splash", "shower-header", "shower-return", "vanity-mirror", "other-mirror", "cabinet-glass", "irregular-glass", "other"
+- "shape" is one of: "rect" (default — simple rectangle), "irregular" (stepped/notched single piece), "curved" (curved edges)
+- "config_hint" is one of: "inline-2-with-door", "inline-2-no-door", "mirror-only", "cabinet-glass", "other" — your best guess at this bath's configuration. The system uses this to select the correct hardware BOM.
+- "width_in" and "height_in" are always present and represent BOUNDING dimensions even for irregular/curved shapes.
+- "shape_notes" captures the dimension chain for irregular shapes (paste the full chain as text) or the template instruction for curved shapes ("site template required — curved edge"). Empty string for plain rects.
+- "needs_template" is true ONLY for curved shapes or anything labeled "need to template" / "needs template" / similar.
+- Keep fractions as strings exactly as written ("47 1/4", not "47.25").
+- "is_cut_size" is true when dimensions came from circled values, false otherwise.
+- "exposed_edges" is an array of any subset of: "top", "bottom", "left", "right".
+- Be CONSERVATIVE with uncertainty_flags — flag every fraction you're unsure about, every bath assignment that's ambiguous, every illegible note. Better to flag than to guess wrong.`;
 
 async function extractFieldMeasureViaClaude(files) {
   // Resize and encode all images
@@ -3823,11 +3840,14 @@ function renderFieldMeasurePanel() {
   const FINISH_OPTIONS = ['Satin Brass', 'Brushed Nickel', 'Matte Black', 'Polished Chrome', 'Polished Nickel', 'Oil Rubbed Bronze', 'unknown'];
   const ROLE_OPTIONS = [
     ['shower-door', 'Shower door'],
-    ['shower-fixed-panel', 'Fixed panel'],
+    ['shower-fixed-panel', 'Fixed panel (full)'],
+    ['shower-fixed-splash', 'Fixed splash (no door)'],
     ['shower-return', 'Return panel'],
     ['shower-header', 'Header'],
     ['vanity-mirror', 'Vanity mirror'],
     ['other-mirror', 'Other mirror'],
+    ['cabinet-glass', 'Cabinet glass'],
+    ['irregular-glass', 'Irregular glass piece'],
     ['other', 'Other'],
   ];
 
@@ -3845,21 +3865,35 @@ function renderFieldMeasurePanel() {
       const roleOptHtml = ROLE_OPTIONS.map(([v, l]) => `<option value="${v}" ${p.role === v ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('');
       const expArr = p.exposed_edges || [];
       const exposedTxt = expArr.length ? expArr.join(' + ') : 'none';
-      return `<tr>
+      const shape = p.shape || 'rect';
+      const showShapeNotes = (shape === 'irregular' || shape === 'curved');
+      const shapeBadge = shape === 'irregular'
+        ? '<div style="display:inline-block; padding:1px 6px; margin-top:4px; background:rgba(80,120,160,0.15); color:#1f3447; font-size:10px; font-family:var(--mono); letter-spacing:0.05em; border-radius:3px;">IRREGULAR</div>'
+        : shape === 'curved'
+        ? '<div style="display:inline-block; padding:1px 6px; margin-top:4px; background:rgba(184,116,43,0.15); color:var(--warning); font-size:10px; font-family:var(--mono); letter-spacing:0.05em; border-radius:3px;">NEEDS TEMPLATE</div>'
+        : '';
+      const mainRow = `<tr>
         <td style="padding:6px 8px;">
           <select onchange="updatePieceField(${idx}, ${pi}, 'kind', this.value)" style="font-size:12px; margin-bottom:3px; width:100%; padding:3px 4px; border:1px solid var(--hairline); border-radius:3px;">
             <option value="glass" ${p.kind === 'glass' ? 'selected' : ''}>Glass</option>
             <option value="mirror" ${p.kind === 'mirror' ? 'selected' : ''}>Mirror</option>
           </select>
-          <select onchange="updatePieceField(${idx}, ${pi}, 'role', this.value)" style="font-size:12px; width:100%; padding:3px 4px; border:1px solid var(--hairline); border-radius:3px;">
+          <select onchange="updatePieceField(${idx}, ${pi}, 'role', this.value)" style="font-size:12px; width:100%; padding:3px 4px; border:1px solid var(--hairline); border-radius:3px; margin-bottom:3px;">
             ${roleOptHtml}
           </select>
+          <select onchange="updatePieceField(${idx}, ${pi}, 'shape', this.value)" style="font-size:11px; width:100%; padding:3px 4px; border:1px solid var(--hairline); border-radius:3px; color:var(--muted);">
+            <option value="rect" ${shape === 'rect' ? 'selected' : ''}>Rect (default)</option>
+            <option value="irregular" ${shape === 'irregular' ? 'selected' : ''}>Irregular shape</option>
+            <option value="curved" ${shape === 'curved' ? 'selected' : ''}>Curved (needs template)</option>
+          </select>
+          ${shapeBadge}
         </td>
         <td style="padding:6px 8px; white-space:nowrap;">
           <input type="text" value="${escapeHtml(p.width_in || '')}" onblur="updatePieceField(${idx}, ${pi}, 'width_in', this.value)" style="width:62px; font-family:var(--mono); font-size:13px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="W"/>
           <span style="opacity:0.4;">×</span>
           <input type="text" value="${escapeHtml(p.height_in || '')}" onblur="updatePieceField(${idx}, ${pi}, 'height_in', this.value)" style="width:62px; font-family:var(--mono); font-size:13px; padding:5px 6px; border:1px solid var(--hairline); border-radius:3px;" placeholder="H"/>
           ${p.is_cut_size ? '' : '<div style="font-size:9px; color:var(--warning); font-family:var(--mono); margin-top:3px;">not circled</div>'}
+          ${shape !== 'rect' ? '<div style="font-size:9px; color:var(--muted); font-family:var(--mono); margin-top:3px;">bounding</div>' : ''}
         </td>
         <td style="padding:6px 8px; font-size:12px;">${escapeHtml(exposedTxt)}</td>
         <td style="padding:6px 8px;">
@@ -3869,6 +3903,12 @@ function renderFieldMeasurePanel() {
           <button onclick="removePieceFromBath(${idx}, ${pi})" style="background:transparent; border:1px solid var(--hairline); color:var(--muted); padding:2px 8px; font-size:14px; line-height:1; cursor:pointer; border-radius:3px;" title="Remove piece">×</button>
         </td>
       </tr>`;
+      const shapeNotesRow = showShapeNotes ? `<tr>
+        <td colspan="5" style="padding:0 8px 10px 8px;">
+          <textarea onblur="updatePieceField(${idx}, ${pi}, 'shape_notes', this.value)" placeholder="${shape === 'irregular' ? 'Paste the dimension chain across the top + heights on the body. e.g. \\n  X chain: 17 1/2 + 25 1/2 + 17 1/2 + 2 1/8 + 17 1/2 + 25 1/16 + 17 1/2 + 1\\n  Y heights: 14 1/8, 23 1/8, 14 3/16, 13 3/16, 14 7/16, 23 1/8, 14, 13 3/8' : 'Site template required. Note any reference points or template instructions.'}" style="width:100%; font-size:11px; font-family:var(--mono); padding:6px 8px; border:1px solid var(--hairline); border-radius:3px; resize:vertical; min-height:60px;">${escapeHtml(p.shape_notes || '')}</textarea>
+        </td>
+      </tr>` : '';
+      return mainRow + shapeNotesRow;
     }).join('');
 
     c.innerHTML = `
@@ -4018,6 +4058,15 @@ function updatePieceField(bathIdx, pieceIdx, field, value) {
   if ((field === 'width_in' || field === 'height_in') && value && !piece.is_cut_size) {
     piece.is_cut_size = true;
   }
+  // Sync needs_template flag with shape='curved'
+  if (field === 'shape') {
+    piece.needs_template = (value === 'curved');
+  }
+  // Shape changes require a full re-render (shape-notes row appears/disappears).
+  if (field === 'shape') {
+    renderReview();
+    return;
+  }
   // Refresh just the sketch for this bath when geometry/labelling changed.
   if (field === 'width_in' || field === 'height_in' || field === 'kind' || field === 'role') {
     const sketchEl = document.getElementById('flowb-sketch-' + bathIdx);
@@ -4038,10 +4087,13 @@ function addPieceToBath(bathIdx) {
   data.baths[bathIdx].pieces.push({
     kind: 'glass',
     role: 'shower-fixed-panel',
+    shape: 'rect',
     width_in: '',
     height_in: '',
     is_cut_size: true,
     exposed_edges: [],
+    shape_notes: '',
+    needs_template: false,
     notes: '',
   });
   renderReview();
@@ -4352,10 +4404,114 @@ function renderFlagsOutput() {
 // Builds an SG-shaped cut list tree from flow-B field-measure data.
 // Inserts shop-standard hardware defaults (matches Beck inline-2 BOM) when a
 // shower door is present. Mirrors and other items render as their own blocks.
+// =============== BOM TEMPLATES (Flow B) ===============
+// Each template encodes a configuration's standard hardware/sundries/labor.
+// Detection runs on a bath's piece list at cut-list build time and picks the
+// matching template, which then generates rows. Adding a new config is
+// scoped to adding one entry here — no other code needs to change.
+
+const FLOWB_BOM_TEMPLATES = {
+  'inline-2-with-door': {
+    name: 'Supply and Install · Inline shower w/ door',
+    matches: (pieces) => {
+      const hasDoor = pieces.some(p => p.role === 'shower-door');
+      const hasFixed = pieces.some(p => p.role === 'shower-fixed-panel');
+      return hasDoor && hasFixed;
+    },
+    hardware: (finish) => [
+      { label: 'Hinges',     qty: 2, notes: finish + ' · V1E037 Vienna Wall Mount Hinge' },
+      { label: 'Wall clamps',qty: 2, notes: finish + ' · SGCU1 Heavy Duty Square Wall Clamp · 10" from top + 10" from bottom of fixed panel' },
+      { label: 'Handle',     qty: 1, notes: finish + ' · BM6X6 Tubular 6" back-to-back pull' },
+    ],
+    needsHeader: true,
+    sundries: () => [{ label: 'Silicone', qty: 2, notes: 'tubes · clear' }],
+    fabUnitsPerGlass: 2,
+    installUnits: 3,
+  },
+  'inline-2-no-door': {
+    name: 'Supply and Install · Inline splash (no door)',
+    matches: (pieces) => {
+      const showerGlass = pieces.filter(p => p.kind === 'glass' && (p.role || '').startsWith('shower-') && p.role !== 'shower-header');
+      if (showerGlass.length < 2) return false;
+      const hasDoor = pieces.some(p => p.role === 'shower-door');
+      const allShortish = showerGlass.every(p => {
+        const h = parseDimToInches(p.height_in);
+        return h > 0 && h < 60;
+      });
+      return !hasDoor && (allShortish || showerGlass.some(p => p.role === 'shower-fixed-splash'));
+    },
+    hardware: (finish) => [
+      { label: 'Wall clamps',  qty: 4, notes: finish + ' · BCU4 Beveled Wall Mount Clamp' },
+      { label: 'Corner clamp', qty: 1, notes: finish + ' · S0GC90 90° Slip-over Clamp' },
+    ],
+    needsHeader: false,
+    sundries: () => [{ label: 'Silicone', qty: 2, notes: 'tubes · clear' }],
+    fabUnitsPerGlass: 2,
+    installUnits: 2,
+  },
+  'mirror-only': {
+    name: 'Supply & Install of Mirror(s)',
+    matches: (pieces) => {
+      const hasShower = pieces.some(p => p.kind === 'glass' && (p.role || '').startsWith('shower-'));
+      const hasMirror = pieces.some(p => p.kind === 'mirror' || (p.role || '').endsWith('mirror'));
+      return !hasShower && hasMirror;
+    },
+    hardware: (finish) => [
+      { label: 'Standoffs', qty: 2, notes: finish + ' · D636' },
+    ],
+    needsHeader: false,
+    sundries: () => [
+      { label: 'Silicone', qty: 1, notes: 'tube' },
+      { label: 'Double-sided tape', qty: 0.5, notes: 'roll' },
+    ],
+    fabUnitsPerGlass: 0,
+    installUnits: 1,
+    installLabel: '1 Hour Install & Measure',
+  },
+  'cabinet-glass': {
+    name: 'Supply and Install · Cabinet Glass',
+    matches: (pieces) => {
+      const hasCabinet = pieces.some(p => p.role === 'cabinet-glass' || (p.notes || '').toLowerCase().includes('reeded') || (p.notes || '').toLowerCase().includes('cabinet'));
+      const hasShower = pieces.some(p => p.kind === 'glass' && (p.role || '').startsWith('shower-'));
+      return hasCabinet && !hasShower;
+    },
+    hardware: () => [],
+    needsHeader: false,
+    sundries: () => [{ label: 'Silicone', qty: 1, notes: 'tube' }],
+    fabUnitsPerGlass: 0,
+    installUnits: 1,
+    installLabel: '1 Hour Install and measure cabinet inserts/shelves',
+  },
+  'other': {
+    name: 'Supply and Install · Custom configuration',
+    matches: () => true,
+    hardware: () => [],
+    needsHeader: false,
+    sundries: () => [{ label: 'Silicone', qty: 2, notes: 'tubes' }],
+    fabUnitsPerGlass: 1,
+    installUnits: 2,
+  },
+};
+
+function detectBOMTemplate(bath) {
+  const pieces = bath.pieces || [];
+  const hint = bath.config_hint;
+  if (hint && FLOWB_BOM_TEMPLATES[hint] && FLOWB_BOM_TEMPLATES[hint].matches(pieces)) {
+    return Object.assign({ key: hint }, FLOWB_BOM_TEMPLATES[hint]);
+  }
+  const order = ['inline-2-with-door', 'inline-2-no-door', 'cabinet-glass', 'mirror-only', 'other'];
+  for (const key of order) {
+    if (FLOWB_BOM_TEMPLATES[key].matches(pieces)) return Object.assign({ key }, FLOWB_BOM_TEMPLATES[key]);
+  }
+  return Object.assign({ key: 'other' }, FLOWB_BOM_TEMPLATES['other']);
+}
+
+// Builds an SG-shaped cut list tree from flow-B field-measure data using
+// the BOM template that matches each bath's configuration.
 function buildFlowBCutListHTML(data) {
   const baths = data.baths || [];
   if (!baths.length) {
-    return `<div class="cutlist-empty"><p>No baths extracted yet.</p><p class="muted">Re-run extraction or add pieces manually on the Review screen.</p></div>`;
+    return '<div class="cutlist-empty"><p>No baths extracted yet.</p><p class="muted">Re-run extraction or add pieces manually on the Review screen.</p></div>';
   }
 
   let html = '';
@@ -4363,172 +4519,104 @@ function buildFlowBCutListHTML(data) {
   baths.forEach(b => {
     const finish = b.finish || 'finish unknown';
     const pieces = b.pieces || [];
+    const template = detectBOMTemplate(b);
 
     const showerGlass = pieces.filter(p => p.kind === 'glass' && (p.role || '').startsWith('shower-') && p.role !== 'shower-header');
     const headers = pieces.filter(p => p.role === 'shower-header');
     const mirrors = pieces.filter(p => p.kind === 'mirror' || (p.role || '').endsWith('mirror'));
-    const others = pieces.filter(p => !showerGlass.includes(p) && !headers.includes(p) && !mirrors.includes(p));
+    const cabinet = pieces.filter(p => p.role === 'cabinet-glass' || ((p.notes || '').toLowerCase().includes('reeded')) || ((p.notes || '').toLowerCase().includes('cabinet')));
+    const irregular = pieces.filter(p => p.shape === 'irregular' || p.role === 'irregular-glass');
+    const placedSet = new Set([...showerGlass, ...headers, ...mirrors, ...cabinet, ...irregular]);
+    const others = pieces.filter(p => !placedSet.has(p));
 
-    const hasDoor = showerGlass.some(p => p.role === 'shower-door');
     const hasShower = showerGlass.length > 0 || headers.length > 0;
 
-    // ── Shower block (Supply and Install · finish) ────────────────
-    if (hasShower) {
+    if (hasShower || cabinet.length || irregular.length || (others.length && template.key === 'other')) {
       let rows = '';
 
-      rows += `<tr>
-        <td><strong>Field Measure</strong><div class="cutlist-sub">on-site by Dion · photos on file</div></td>
-        <td class="cutlist-size">—</td>
-        <td class="cutlist-qty">1</td>
-        <td class="cutlist-notes">Exact dimensions</td>
-      </tr>`;
+      const installLabel = template.installLabel || 'Field Measure & Consultation';
+      rows += '<tr><td><strong>' + escapeHtml(installLabel) + '</strong><div class="cutlist-sub">on-site by Dion · photos on file</div></td><td class="cutlist-size">—</td><td class="cutlist-qty">1</td><td class="cutlist-notes">Exact dimensions</td></tr>';
 
-      showerGlass.forEach(p => {
+      const cutPieces = [...showerGlass, ...cabinet, ...irregular, ...(template.key === 'other' ? others.filter(p => p.kind === 'glass') : [])];
+      cutPieces.forEach(p => {
         const expArr = p.exposed_edges || [];
-        const expTxt = expArr.length ? expArr.join('+') + ' polished' : 'no exposed';
-        rows += `<tr>
-          <td><strong>${escapeHtml(roleLabel(p.role))}</strong><div class="cutlist-sub">${escapeHtml(p.kind)}${p.notes ? ' · ' + escapeHtml(p.notes) : ''}${p.is_cut_size ? '' : ' · estimate'}</div></td>
-          <td class="cutlist-size">${escapeHtml(p.width_in || '?')}" × ${escapeHtml(p.height_in || '?')}"</td>
-          <td class="cutlist-qty">1</td>
-          <td class="cutlist-notes">${escapeHtml(expTxt)}</td>
-        </tr>`;
+        const expTxt = expArr.length ? expArr.join('+') + ' polished' : '';
+        const noteParts = [];
+        if (p.shape === 'curved' || p.needs_template) noteParts.push('NEEDS SITE TEMPLATE');
+        if (p.shape === 'irregular') noteParts.push('IRREGULAR — see chain');
+        if (!p.is_cut_size) noteParts.push('estimate');
+        if (expTxt) noteParts.push(expTxt);
+        if (p.notes) noteParts.push(p.notes);
+        const sizeStr = escapeHtml(p.width_in || '?') + '" × ' + escapeHtml(p.height_in || '?') + '"';
+        const subline = escapeHtml(p.kind) + (p.shape && p.shape !== 'rect' ? ' · ' + escapeHtml(p.shape) : '');
+
+        rows += '<tr><td><strong>' + escapeHtml(roleLabel(p.role)) + '</strong><div class="cutlist-sub">' + subline + '</div></td><td class="cutlist-size">' + sizeStr + '</td><td class="cutlist-qty">1</td><td class="cutlist-notes">' + escapeHtml(noteParts.join(' · ')) + '</td></tr>';
+
+        if (p.shape === 'irregular' && p.shape_notes) {
+          rows += '<tr><td colspan="4" style="background:rgba(80,120,160,0.05); padding:8px 12px; font-family:var(--mono); font-size:11px; color:var(--muted); white-space:pre-wrap;">' + escapeHtml(p.shape_notes) + '</td></tr>';
+        }
+        if (p.shape === 'curved' && p.shape_notes) {
+          rows += '<tr><td colspan="4" style="background:rgba(184,116,43,0.06); padding:8px 12px; font-size:12px; color:var(--warning);">' + escapeHtml(p.shape_notes) + '</td></tr>';
+        }
       });
 
-      headers.forEach(p => {
-        rows += `<tr>
-          <td><strong>Header</strong><div class="cutlist-sub">P770WS stock · cut on site</div></td>
-          <td class="cutlist-size">cut to ${escapeHtml(p.width_in || '?')}"</td>
-          <td class="cutlist-qty">1</td>
-          <td class="cutlist-notes">${escapeHtml(p.notes || '')}</td>
-        </tr>`;
-      });
-
-      // Hardware defaults (shop standard for inline-2 frameless — Beck-confirmed)
-      if (hasDoor) {
-        rows += `<tr>
-          <td><strong>Hinges</strong></td>
-          <td></td>
-          <td class="cutlist-qty">2</td>
-          <td class="cutlist-notes">${escapeHtml(finish)} · V1E037</td>
-        </tr>`;
-        rows += `<tr>
-          <td><strong>Wall clamps</strong></td>
-          <td></td>
-          <td class="cutlist-qty">2</td>
-          <td class="cutlist-notes">${escapeHtml(finish)} · SGCU1 · 10" from top + 10" from bottom of fixed panel</td>
-        </tr>`;
-        rows += `<tr>
-          <td><strong>Handle</strong></td>
-          <td></td>
-          <td class="cutlist-qty">1</td>
-          <td class="cutlist-notes">${escapeHtml(finish)} · BM6X6</td>
-        </tr>`;
+      if (template.needsHeader) {
+        const headerPiece = headers[0];
+        let headerWidth = headerPiece && headerPiece.width_in;
+        if (!headerWidth && showerGlass.length) {
+          const maxW = showerGlass.reduce((m, p) => {
+            const w = parseDimToInches(p.width_in);
+            return w > m ? w : m;
+          }, 0);
+          if (maxW > 0) headerWidth = String(maxW);
+        }
+        rows += '<tr><td><strong>Header</strong><div class="cutlist-sub">P770WS 98" stock · cut on site</div></td><td class="cutlist-size">' + (headerWidth ? 'cut to ' + escapeHtml(String(headerWidth)) + '"' : 'cut on site') + '</td><td class="cutlist-qty">1</td><td class="cutlist-notes">PVC seal and wipe</td></tr>';
       }
 
-      // Sundries
-      rows += `<tr>
-        <td><strong>Silicone</strong></td>
-        <td></td>
-        <td class="cutlist-qty">2</td>
-        <td class="cutlist-notes">tubes · clear</td>
-      </tr>`;
+      template.hardware(finish).forEach(hw => {
+        rows += '<tr><td><strong>' + escapeHtml(hw.label) + '</strong></td><td></td><td class="cutlist-qty">' + hw.qty + '</td><td class="cutlist-notes">' + escapeHtml(hw.notes || '') + '</td></tr>';
+      });
 
-      // Labor
-      const fabUnits = showerGlass.length * 2 + headers.length * 2 + (hasDoor ? 4 : 0);
-      rows += `<tr>
-        <td><strong>Factory Fabrication</strong></td>
-        <td></td>
-        <td class="cutlist-qty">${fabUnits}</td>
-        <td class="cutlist-notes">units</td>
-      </tr>`;
-      rows += `<tr>
-        <td><strong>Install</strong></td>
-        <td></td>
-        <td class="cutlist-qty">3</td>
-        <td class="cutlist-notes">units</td>
-      </tr>`;
+      template.sundries().forEach(s => {
+        rows += '<tr><td><strong>' + escapeHtml(s.label) + '</strong></td><td></td><td class="cutlist-qty">' + s.qty + '</td><td class="cutlist-notes">' + escapeHtml(s.notes || '') + '</td></tr>';
+      });
 
-      const totalGlassQty = showerGlass.length + headers.length;
-      html += `
-        <div class="cutlist-block">
-          <div class="cutlist-block-h">
-            <span class="cutlist-block-loc">${escapeHtml((b.name || 'Bath').toUpperCase())}</span>
-            <span class="cutlist-block-title">Supply and Install · ${escapeHtml(finish)}</span>
-            <span class="cutlist-block-qty">× ${totalGlassQty}</span>
-          </div>
-          <table class="cutlist-table">
-            <colgroup>
-              <col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/>
-            </colgroup>
-            <thead>
-              <tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
+      const fabUnits = cutPieces.length * (template.fabUnitsPerGlass || 0) + headers.length * 2;
+      if (fabUnits > 0) {
+        rows += '<tr><td><strong>Factory Fabrication</strong></td><td></td><td class="cutlist-qty">' + fabUnits + '</td><td class="cutlist-notes">units</td></tr>';
+      }
+      rows += '<tr><td><strong>Install</strong></td><td></td><td class="cutlist-qty">' + template.installUnits + '</td><td class="cutlist-notes">' + (template.installUnits > 1 ? 'units' : 'unit') + '</td></tr>';
+
+      const totalQty = cutPieces.length + headers.length;
+      html += '<div class="cutlist-block"><div class="cutlist-block-h"><span class="cutlist-block-loc">' + escapeHtml((b.name || 'Bath').toUpperCase()) + '</span><span class="cutlist-block-title">' + escapeHtml(template.name) + (finish !== 'finish unknown' ? ' · ' + escapeHtml(finish) : '') + '</span><span class="cutlist-block-qty">× ' + (totalQty || 1) + '</span></div><table class="cutlist-table"><colgroup><col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/></colgroup><thead><tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
 
-    // ── Mirror block ──────────────────────────────────────────────
-    if (mirrors.length) {
-      const mirrorRows = mirrors.map(p => `<tr>
-        <td><strong>${escapeHtml(roleLabel(p.role) || 'Mirror')}</strong>${p.is_cut_size ? '' : '<div class="cutlist-sub">estimate — verify</div>'}</td>
-        <td class="cutlist-size">${escapeHtml(p.width_in || '?')}" × ${escapeHtml(p.height_in || '?')}"</td>
-        <td class="cutlist-qty">1</td>
-        <td class="cutlist-notes">${escapeHtml(p.notes || '')}</td>
-      </tr>`).join('');
+    if (mirrors.length && template.key !== 'mirror-only') {
+      const mirrorTemplate = FLOWB_BOM_TEMPLATES['mirror-only'];
+      let mirrorRows = '<tr><td><strong>1 Hour Install & Measure All Bath Mirrors</strong></td><td class="cutlist-size">—</td><td class="cutlist-qty">1</td><td class="cutlist-notes"></td></tr>';
+      mirrors.forEach(p => {
+        mirrorRows += '<tr><td><strong>' + escapeHtml(roleLabel(p.role) || 'Mirror') + '</strong>' + (p.is_cut_size ? '' : '<div class="cutlist-sub">estimate — verify</div>') + '</td><td class="cutlist-size">' + escapeHtml(p.width_in || '?') + '" × ' + escapeHtml(p.height_in || '?') + '"</td><td class="cutlist-qty">1</td><td class="cutlist-notes">' + escapeHtml(p.notes || '') + '</td></tr>';
+      });
+      mirrorTemplate.hardware(finish).forEach(hw => {
+        mirrorRows += '<tr><td><strong>' + escapeHtml(hw.label) + '</strong></td><td></td><td class="cutlist-qty">' + (hw.qty * mirrors.length) + '</td><td class="cutlist-notes">' + escapeHtml(hw.notes || '') + '</td></tr>';
+      });
+      mirrorTemplate.sundries().forEach(s => {
+        mirrorRows += '<tr><td><strong>' + escapeHtml(s.label) + '</strong></td><td></td><td class="cutlist-qty">' + (s.qty * mirrors.length) + '</td><td class="cutlist-notes">' + escapeHtml(s.notes || '') + '</td></tr>';
+      });
 
-      html += `
-        <div class="cutlist-block">
-          <div class="cutlist-block-h">
-            <span class="cutlist-block-loc">${escapeHtml((b.name || 'Bath').toUpperCase())}</span>
-            <span class="cutlist-block-title">Mirror${mirrors.length > 1 ? 's' : ''}</span>
-            <span class="cutlist-block-qty">× ${mirrors.length}</span>
-          </div>
-          <table class="cutlist-table">
-            <colgroup><col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/></colgroup>
-            <thead><tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr></thead>
-            <tbody>${mirrorRows}</tbody>
-          </table>
-        </div>`;
+      html += '<div class="cutlist-block"><div class="cutlist-block-h"><span class="cutlist-block-loc">' + escapeHtml((b.name || 'Bath').toUpperCase()) + '</span><span class="cutlist-block-title">Supply & Install of Mirror' + (mirrors.length > 1 ? 's' : '') + ' · ' + escapeHtml(finish) + '</span><span class="cutlist-block-qty">× ' + mirrors.length + '</span></div><table class="cutlist-table"><colgroup><col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/></colgroup><thead><tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr></thead><tbody>' + mirrorRows + '</tbody></table></div>';
     }
 
-    // ── Other items block ─────────────────────────────────────────
-    if (others.length) {
-      const otherRows = others.map(p => `<tr>
-        <td><strong>${escapeHtml(roleLabel(p.role) || 'Other')}</strong><div class="cutlist-sub">${escapeHtml(p.kind)}</div></td>
-        <td class="cutlist-size">${escapeHtml(p.width_in || '?')}" × ${escapeHtml(p.height_in || '?')}"</td>
-        <td class="cutlist-qty">1</td>
-        <td class="cutlist-notes">${escapeHtml(p.notes || '')}</td>
-      </tr>`).join('');
+    const ungrouped = others.filter(p => p.kind !== 'glass');
+    if (ungrouped.length && template.key !== 'other') {
+      const otherRows = ungrouped.map(p => '<tr><td><strong>' + escapeHtml(roleLabel(p.role) || 'Other') + '</strong><div class="cutlist-sub">' + escapeHtml(p.kind) + '</div></td><td class="cutlist-size">' + escapeHtml(p.width_in || '?') + '" × ' + escapeHtml(p.height_in || '?') + '"</td><td class="cutlist-qty">1</td><td class="cutlist-notes">' + escapeHtml(p.notes || '') + '</td></tr>').join('');
 
-      html += `
-        <div class="cutlist-block">
-          <div class="cutlist-block-h">
-            <span class="cutlist-block-loc">${escapeHtml((b.name || 'Bath').toUpperCase())}</span>
-            <span class="cutlist-block-title">Other</span>
-            <span class="cutlist-block-qty">× ${others.length}</span>
-          </div>
-          <table class="cutlist-table">
-            <colgroup><col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/></colgroup>
-            <thead><tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr></thead>
-            <tbody>${otherRows}</tbody>
-          </table>
-        </div>`;
+      html += '<div class="cutlist-block"><div class="cutlist-block-h"><span class="cutlist-block-loc">' + escapeHtml((b.name || 'Bath').toUpperCase()) + '</span><span class="cutlist-block-title">Other</span><span class="cutlist-block-qty">× ' + ungrouped.length + '</span></div><table class="cutlist-table"><colgroup><col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/></colgroup><thead><tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr></thead><tbody>' + otherRows + '</tbody></table></div>';
     }
   });
 
-  // ── Uncertainty flags ────────────────────────────────────────────
   if (data.uncertainty_flags && data.uncertainty_flags.length) {
-    html += `
-      <div class="cutlist-block" style="background: rgba(184, 116, 43, 0.06); border: 1px solid rgba(184, 116, 43, 0.4);">
-        <div class="cutlist-block-h">
-          <span class="cutlist-block-loc" style="color: var(--warning);">VERIFY ON PHOTO</span>
-          <span class="cutlist-block-title">${data.uncertainty_flags.length} item${data.uncertainty_flags.length === 1 ? '' : 's'} flagged by extraction</span>
-        </div>
-        <ul style="margin: 0; padding: 12px 12px 14px 32px; font-size: 13px; line-height: 1.7;">
-          ${data.uncertainty_flags.map(f => '<li>' + escapeHtml(f) + '</li>').join('')}
-        </ul>
-      </div>`;
+    html += '<div class="cutlist-block" style="background: rgba(184, 116, 43, 0.06); border: 1px solid rgba(184, 116, 43, 0.4);"><div class="cutlist-block-h"><span class="cutlist-block-loc" style="color: var(--warning);">VERIFY ON PHOTO</span><span class="cutlist-block-title">' + data.uncertainty_flags.length + ' item' + (data.uncertainty_flags.length === 1 ? '' : 's') + ' flagged by extraction</span></div><ul style="margin: 0; padding: 12px 12px 14px 32px; font-size: 13px; line-height: 1.7;">' + data.uncertainty_flags.map(f => '<li>' + escapeHtml(f) + '</li>').join('') + '</ul></div>';
   }
 
   return html;
@@ -4538,10 +4626,13 @@ function roleLabel(role) {
   const map = {
     'shower-door': 'Shower door',
     'shower-fixed-panel': 'Fixed panel',
+    'shower-fixed-splash': 'Fixed splash panel',
     'shower-return': 'Return panel',
     'shower-header': 'Header',
     'vanity-mirror': 'Vanity mirror',
     'other-mirror': 'Mirror',
+    'cabinet-glass': 'Cabinet glass',
+    'irregular-glass': 'Irregular glass piece',
     'other': 'Other',
   };
   return map[role] || role || '?';
