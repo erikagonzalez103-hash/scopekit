@@ -4354,17 +4354,19 @@ function showRenderPipeline(bath, cfg) {
 
     <div class="pipeline-arrow">↓ POST to worker</div>
 
-    <div class="pipeline-output">
+    <div class="pipeline-output" id="pipeline-render-output">
       <strong>Photoreal render</strong>
-      <div class="meta">${API_CONFIG.workerUrl ?
-        `Generated via Flux ControlNet · ~$0.003 / image · ~8 sec` :
+      <div class="meta" id="pipeline-render-meta">${API_CONFIG.workerUrl && API_CONFIG.fluxEnabled ?
+        `Calling Flux Schnell on Replicate…` :
+        API_CONFIG.workerUrl ? `Worker URL set but fluxEnabled is off — flip it in API_CONFIG to render` :
         `Pipeline ready · awaiting worker deployment`}</div>
+      <div id="pipeline-render-image" style="margin-top: 14px;"></div>
     </div>
 
     ${API_CONFIG.workerUrl ? '' : `
       <div class="pipeline-status">
         <strong>Worker not deployed</strong>
-        Constraint diagram is generated and ready to ship. To activate live rendering: deploy the Cloudflare Worker (worker.js + wrangler.toml in your outputs), set REPLICATE_API_KEY as a secret, then update API_CONFIG.workerUrl in scopekit.html. First test render: 8-10 seconds, ~$0.003.
+        Constraint diagram is generated and ready to ship. Set API_CONFIG.workerUrl above to your Cloudflare Worker URL and flip fluxEnabled to true. First test render: 6-8 seconds, ~$0.003.
       </div>`}
 
     <div style="margin-top: 20px; padding: 14px 16px; background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-sm); font-size: 12px;">
@@ -4375,11 +4377,63 @@ function showRenderPipeline(bath, cfg) {
 
   $('#pipeline-modal-bg').classList.add('is-open');
   modal.classList.add('is-open');
+
+  // Fire the actual render call if the worker is wired up.
+  if (API_CONFIG.workerUrl && API_CONFIG.fluxEnabled) {
+    runRender(payload).catch(err => {
+      const meta = $('#pipeline-render-meta');
+      if (meta) meta.textContent = 'Render failed';
+      const imgArea = $('#pipeline-render-image');
+      if (imgArea) {
+        imgArea.innerHTML = `<div style="padding: 14px 16px; background: #FCEBEB; border: 1px solid #E24B4A; border-radius: 6px; color: #791F1F; font-size: 12px; line-height: 1.5;">${escapeHtml(String(err.message || err))}</div>`;
+      }
+    });
+  }
 }
 
 function closeRenderPipeline() {
   $('#pipeline-modal-bg').classList.remove('is-open');
   $('#pipeline-modal').classList.remove('is-open');
+}
+
+// =============== RENDER FETCH ===============
+// Posts to the Cloudflare Worker /api/render endpoint, which proxies to
+// Replicate (Flux Schnell by default). Replaces the loading meta + injects
+// the returned image into the modal output area on success.
+async function runRender(payload) {
+  const startedAt = Date.now();
+  const res = await fetch(API_CONFIG.workerUrl + '/api/render', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: payload.prompt,
+      // Sized to match Flux Schnell defaults; ControlNet upgrade can extend this later.
+      input: {
+        prompt: payload.prompt,
+        aspect_ratio: '16:9',
+        output_format: 'webp',
+        output_quality: 90,
+      },
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error('Worker error ' + res.status + ': ' + txt.substring(0, 220));
+  }
+  const data = await res.json();
+  if (data.error) {
+    const detailStr = typeof data.detail === 'object' ? JSON.stringify(data.detail).substring(0, 220) : String(data.detail || '').substring(0, 220);
+    throw new Error(data.error + (detailStr ? ' — ' + detailStr : ''));
+  }
+  if (!data.image_url) throw new Error('No image_url in worker response');
+
+  const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+  const meta = $('#pipeline-render-meta');
+  if (meta) meta.textContent = `Generated via Flux Schnell · ${elapsed}s · click image to open full size`;
+  const imgArea = $('#pipeline-render-image');
+  if (imgArea) {
+    imgArea.innerHTML = `<a href="${data.image_url}" target="_blank" rel="noopener"><img src="${data.image_url}" alt="Rendered shower" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--hairline); display: block;"></a>`;
+  }
 }
 
 function renderMirrorCard(bath) {
