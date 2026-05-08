@@ -3522,20 +3522,150 @@ Return JSON ONLY, no prose, no markdown, in this exact shape:
 }
 
 async function extractViaWorker() {
-  // SWAP POINT: Cloudflare Worker call goes here.
-  // Worker handles: pdf.js text extraction, Claude vision on raster pages,
-  // returns structured bathroom/feature data + scale status.
-  const fd = new FormData();
-  state.planFiles.forEach((f, i) => fd.append('plan_' + i, f));
-  fd.append('builder', state.builder || '');
-  fd.append('comm', state.comm || '');
-  const res = await fetch(API_CONFIG.workerUrl + '/extract', {
+  // Calls Anthropic via the worker's /api/messages proxy with the plan PDF(s) as
+  // document attachments. Anthropic supports native PDF input, so the model can
+  // read text + render pages internally without us doing client-side rasterization.
+  if (!state.planFiles.length) {
+    throw new Error('No plan files uploaded.');
+  }
+
+  // Read each file as base64 and turn into the right Anthropic content block.
+  const docContents = [];
+  for (const file of state.planFiles) {
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(new Error('Could not read file: ' + file.name));
+      r.readAsDataURL(file);
+    });
+    const base64 = (dataUrl || '').split(',')[1] || '';
+    const mime = (file.type || '').toLowerCase();
+    const isPdf = mime === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (isPdf) {
+      docContents.push({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+      });
+    } else if (mime.startsWith('image/')) {
+      docContents.push({
+        type: 'image',
+        source: { type: 'base64', media_type: mime, data: base64 },
+      });
+    } else {
+      console.warn('[ScopeKit] Skipping unsupported file type:', file.name, mime);
+    }
+  }
+
+  if (docContents.length === 0) {
+    throw new Error('No readable PDFs or images in the uploaded files.');
+  }
+
+  // Build the prompt with builder + comm context
+  const prompt = PLAN_EXTRACTION_PROMPT
+    .replace('{{BUILDER}}', state.builder || 'unknown')
+    .replace('{{COMM}}', (state.comm || '').substring(0, 2000));
+  docContents.push({ type: 'text', text: prompt });
+
+  const body = {
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 8000,
+    messages: [{ role: 'user', content: docContents }],
+  };
+
+  const res = await fetch(API_CONFIG.workerUrl + '/api/messages', {
     method: 'POST',
-    body: fd,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Worker error: ' + res.status);
-  return await res.json();
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error('Worker error ' + res.status + ': ' + errText.substring(0, 240));
+  }
+  const data = await res.json();
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+
+  // Reuse the robust JSON parser from Flow B
+  const parsed = parseExtractionJSON(text, data);
+
+  // Normalize shape — fields the review screen depends on
+  return {
+    bathrooms: Array.isArray(parsed.bathrooms) ? parsed.bathrooms : [],
+    otherItems: Array.isArray(parsed.otherItems) ? parsed.otherItems : [],
+    scaleStatus: parsed.scaleStatus || null,
+  };
 }
+
+// Plan-extraction prompt — used by extractViaWorker for builder PDFs
+const PLAN_EXTRACTION_PROMPT = `You are an Eridion Glass scope estimator. You're looking at architectural plans for a residential project. Identify every glass-relevant scope item and return structured data.
+
+Builder on this set: {{BUILDER}}
+Builder communication / context (may be empty): {{COMM}}
+
+PROCESS:
+1. Find the floor-plan sheet(s) and the cabinet-section / interior-elevation sheet(s). The cabinet-section sheet typically has labeled mirrors with sizes and shapes — those are authoritative for mirror specs.
+2. For every BATHROOM identified in the room schedule or labeled on the floor plan, capture its glass scope.
+3. Skip rooms with no glass scope: closets, garage, hallway, mudroom (unless it has a mirror), pantry (unless it has glass-front cabinets), bedrooms (unless ensuite), etc.
+4. If a bathroom is labeled "Tub w/ Tiled Walls" with no shower, it has NO shower glass — but it may still have a mirror.
+5. Collect non-bathroom glass scope (kitchen cabinet glass, pantry glass-front cabinets, custom art glass) under otherItems.
+
+WHAT TO LOOK FOR PER BATHROOM:
+- **Ceiling height** — from "Ceiling Height X'" labels on the floor plan.
+- **Shower type** — "Walk-in", "Curbless walk-in" (recessed), "Tub w/ Tiled Walls" (no glass), "Tub/shower combo".
+- **Shower dimensions** — read off the floor plan if labeled, otherwise estimate from scale.
+- **Shower features** — bench, recessed shampoo niche, knee/pony wall (e.g. "36\\" tall 2x6 shelf" = 36-inch knee wall), wall-mount faucet, linear drain.
+- **Wall layout** — "inline-2" (door + fixed panel), "inline-2-no-door" (two splash panels meeting at corner, no door), "L-shape", "neo-angle", "single-panel", "tub-glass", or null if ambiguous.
+- **Vanity** — count of vanities, dim of each, wall width the vanity sits on.
+- **Mirror** — size + shape exactly as labeled on the cabinet-section sheet. Decorative shapes (Round Scalloped, Squoval, Broken Arch, etc.) are critical — they typically need vendor sourcing rather than in-shop fab. Flag these in flags.
+
+CONFIDENCE LEVELS:
+- "high" — explicitly labeled on the plan with dimensions or text.
+- "med" — inferred from related labels or scaled.
+- "low" — guessed; needs site visit or builder confirmation.
+
+Return JSON ONLY, no markdown fences, no preamble. Schema:
+
+{
+  "bathrooms": [
+    {
+      "id": "bath-1",
+      "name": "Primary Bath",
+      "ceiling": { "value": "10'-0\\"", "conf": "high", "mode": "auto" },
+      "shower": {
+        "type": { "value": "Curbless walk-in", "conf": "high", "mode": "auto" },
+        "dims": { "value": "72\\" × 42\\"", "conf": "med", "mode": "auto" },
+        "features": ["bench", "recessed shampoo niche", "36\\" knee wall with wall-mount faucet"],
+        "walls": {
+          "layout": "inline-2",
+          "conf": "med",
+          "mode": "auto",
+          "ambiguous": false,
+          "hint": "Knee wall + glass above; door configuration not shown — confirm with builder"
+        }
+      },
+      "vanity": {
+        "count": 2,
+        "dims": { "value": "...", "conf": "high", "mode": "auto" },
+        "wallWidth": { "value": "8'-8\\"", "conf": "high", "mode": "auto" }
+      },
+      "mirror": { "value": "2× 36×42 Round Scalloped (decorative shape)", "conf": "high", "mode": "auto" },
+      "flags": [
+        { "kind": "attn", "text": "Decorative mirror shape — confirm vendor-sourced vs. in-shop fab" }
+      ]
+    }
+  ],
+  "otherItems": [
+    { "type": "cabinet-glass", "location": "kitchen", "value": "Glass-front upper cabinets — quantity TBD from cabinet-section sheet" }
+  ],
+  "scaleStatus": null
+}
+
+Rules:
+- Always emit at least one bathroom if the plan has any bathroom-labeled rooms (mirror-only baths still count).
+- Tub-only baths (Tub w/ Tiled Walls, no shower drawn): set shower.type.value = "Tub w/ Tiled Walls" and walls.layout = null.
+- For decorative mirror shapes, ALWAYS add a flag with kind="attn" calling out vendor sourcing.
+- For recessed showers, ALWAYS add a flag with kind="info" noting the curbless detail (affects threshold + drain).
+- For knee walls / pony walls, ALWAYS add a flag with kind="info" describing height + faucet position.
+- Be conservative: if the plan doesn't show something explicitly, don't invent it. Set conf="low" and add a flag rather than guessing.`;
 
 // =============== FIELD-MEASURE EXTRACTION (Flow B — no plans) ===============
 // Used when intake is Dion's hand-drawn sketches on Eridion's field-measure
