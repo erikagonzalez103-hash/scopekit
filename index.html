@@ -3642,6 +3642,16 @@ CONFIDENCE LEVELS:
 - "med" — inferred from related labels or scaled.
 - "low" — guessed; needs site visit or builder confirmation.
 
+WHEN COMM EXCLUDES SCOPE FROM A BATHROOM (e.g. "no shower glass", "mirrors only"):
+- Still emit the bathroom record so mirrors and other in-scope items are captured.
+- For excluded scope inside that bathroom, use NEUTRAL values that signal "skip":
+  - shower.type.value = "—"
+  - shower.dims.value = "—"
+  - shower.walls.layout = null
+  - shower.features = []
+- Add a flag: { kind: "info", text: "Shower glass excluded by scope (per comm)" }
+This lets the cut list skip the shower block entirely while keeping the bathroom for mirrors.
+
 Return JSON ONLY, no markdown fences, no preamble. Schema:
 
 {
@@ -5398,7 +5408,10 @@ function openCutList() {
     x.shower?.type?.value && !/none|tbd|—/i.test(x.shower.type.value)
   );
 
-  if (!showers.length && !state.bathrooms?.some(b => (b.vanity?.count || 0) > 0)) {
+  if (!showers.length
+      && !state.bathrooms?.some(b => (b.vanity?.count || 0) > 0)
+      && !state.bathrooms?.some(b => b.mirror?.value && !/^(tbd|—|none|n\/a)$/i.test(b.mirror.value || ''))
+      && !(state.otherItems || []).length) {
     body.innerHTML = `
       <div class="cutlist-empty">
         <p>No glass scope to display yet.</p>
@@ -5492,49 +5505,121 @@ function openCutList() {
       </div>`;
   });
 
-  // Mirrors — one block per bath that has a mirror config
-  const mirrorBaths = (state.bathrooms || []).filter(b =>
-    (b.vanity?.count || 0) > 0 && state.mirrorConfigs?.[b.id]
-  );
+  // Mirrors — one block per bath. Prefer the configured mirrorConfigs (calc'd from
+  // wall width + count), but fall back to extracted mirror text when the user
+  // hasn't been through the configure step yet (e.g. immediately after extraction).
+  const mirrorBaths = (state.bathrooms || []).filter(b => {
+    const hasConfig = (b.vanity?.count || 0) > 0 && state.mirrorConfigs?.[b.id];
+    const hasExtractedSpec = b.mirror?.value && !/^(tbd|—|none|n\/a)$/i.test(b.mirror.value || '');
+    return hasConfig || hasExtractedSpec;
+  });
   mirrorBaths.forEach(b => {
-    const mc = state.mirrorConfigs[b.id];
+    const mc = state.mirrorConfigs?.[b.id];
     const wallW = toInches(b.vanity?.wallWidth?.value);
-    if (!wallW) return;
-    const heightStr = mc.mirrorHeight === 'Custom' ? (mc.customMirrorHeight || '40"') : mc.mirrorHeight;
-    const heightIn = toInches(String(heightStr).replace('"', '')) || 40;
-    const calc = calcMirrorOptions(wallW, b.vanity?.count || 1, heightIn);
-    const sel = calc.options.find(o => o.id === mc.selectedOption) || calc.options[0];
-    if (!sel) return;
+
+    // Path A: configured mirror calculation (preferred when configured)
+    if (mc && wallW) {
+      const heightStr = mc.mirrorHeight === 'Custom' ? (mc.customMirrorHeight || '40"') : mc.mirrorHeight;
+      const heightIn = toInches(String(heightStr).replace('"', '')) || 40;
+      const calc = calcMirrorOptions(wallW, b.vanity?.count || 1, heightIn);
+      const sel = calc.options.find(o => o.id === mc.selectedOption) || calc.options[0];
+      if (sel) {
+        html += `
+          <div class="cutlist-block">
+            <div class="cutlist-block-h">
+              <span class="cutlist-block-loc">${escapeHtml(b.name).toUpperCase()}</span>
+              <span class="cutlist-block-title">Vanity Mirror${sel.count > 1 ? 's' : ''}</span>
+              <span class="cutlist-block-qty">× 1</span>
+            </div>
+            <table class="cutlist-table">
+              <colgroup>
+                <col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/>
+              </colgroup>
+              <thead>
+                <tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>1/4" Mirror · Polished edge</strong></td>
+                  <td class="cutlist-size">${formatFraction(sel.eachWidth)}" × ${formatFraction(sel.eachHeight)}"</td>
+                  <td class="cutlist-qty">${sel.count}</td>
+                  <td class="cutlist-notes">${escapeHtml(sel.position)}</td>
+                </tr>
+                <tr>
+                  <td><strong>Install</strong></td>
+                  <td></td>
+                  <td class="cutlist-qty">${sel.count}</td>
+                  <td class="cutlist-notes"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>`;
+        return; // configured path renders, skip extracted fallback
+      }
+    }
+
+    // Fallback: render from extracted spec text. Useful when extraction has
+    // dimensions/shape but the user hasn't configured the mirror yet — so the
+    // cut list still shows what's in scope. Decorative-shape flags (e.g. "Round
+    // Scalloped", "Broken Arch") get surfaced as a notes row.
+    const spec = (b.mirror?.value || '').trim();
+    if (!spec) return;
+    const decorativeShape = /scalloped|squoval|broken arch|arched|oval|round|beveled|custom shape/i.test(spec);
 
     html += `
       <div class="cutlist-block">
         <div class="cutlist-block-h">
           <span class="cutlist-block-loc">${escapeHtml(b.name).toUpperCase()}</span>
-          <span class="cutlist-block-title">Vanity Mirror${sel.count > 1 ? 's' : ''}</span>
+          <span class="cutlist-block-title">Vanity Mirror — extracted spec</span>
           <span class="cutlist-block-qty">× 1</span>
         </div>
         <table class="cutlist-table">
           <colgroup>
-            <col class="col-desc"/>
-            <col class="col-size"/>
-            <col class="col-qty"/>
-            <col class="col-notes"/>
+            <col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/>
           </colgroup>
           <thead>
             <tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>1/4" Mirror · Polished edge</strong></td>
-              <td class="cutlist-size">${formatFraction(sel.eachWidth)}" × ${formatFraction(sel.eachHeight)}"</td>
-              <td class="cutlist-qty">${sel.count}</td>
-              <td class="cutlist-notes">${escapeHtml(sel.position)}</td>
+              <td><strong>Mirror</strong>${b.mirror?.conf ? `<div class="cutlist-sub">conf · ${escapeHtml(b.mirror.conf)}</div>` : ''}</td>
+              <td class="cutlist-size">${escapeHtml(spec)}</td>
+              <td class="cutlist-qty">—</td>
+              <td class="cutlist-notes">${decorativeShape ? '<strong style="color:var(--warning);">Decorative shape — confirm vendor-sourced vs in-shop fab</strong>' : 'From extraction · run "configure mirrors" for SG-shaped output'}</td>
             </tr>
+          </tbody>
+        </table>
+      </div>`;
+  });
+
+  // Other items — cabinet glass, pantry glass-front, custom items extracted
+  // outside any specific bathroom. Each item renders as its own block.
+  const otherItems = state.otherItems || [];
+  otherItems.forEach(item => {
+    const loc = (item.location || 'other').toUpperCase();
+    const itemType = item.type || 'other';
+    const value = (item.value || '').trim();
+    if (!value) return;
+    html += `
+      <div class="cutlist-block">
+        <div class="cutlist-block-h">
+          <span class="cutlist-block-loc">${escapeHtml(loc)}</span>
+          <span class="cutlist-block-title">${escapeHtml(itemType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</span>
+          <span class="cutlist-block-qty">× 1</span>
+        </div>
+        <table class="cutlist-table">
+          <colgroup>
+            <col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/>
+          </colgroup>
+          <thead>
+            <tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
             <tr>
-              <td><strong>Install</strong></td>
-              <td></td>
-              <td class="cutlist-qty">${sel.count}</td>
-              <td class="cutlist-notes"></td>
+              <td><strong>${escapeHtml(value)}</strong></td>
+              <td class="cutlist-size">—</td>
+              <td class="cutlist-qty">—</td>
+              <td class="cutlist-notes">From extraction · confirm with builder</td>
             </tr>
           </tbody>
         </table>
