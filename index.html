@@ -3598,15 +3598,35 @@ async function extractViaWorker() {
 // Plan-extraction prompt — used by extractViaWorker for builder PDFs
 const PLAN_EXTRACTION_PROMPT = `You are an Eridion Glass scope estimator. You're looking at architectural plans for a residential project. Identify every glass-relevant scope item and return structured data.
 
+╔═════════════════════════════════════════════════════════════════════╗
+║ SCOPE OVERRIDES FROM BUILDER / ERIKA COMM — THIS IS AUTHORITATIVE.   ║
+║ The plans tell you WHAT EXISTS in the project.                       ║
+║ The comm block below tells you WHAT'S IN ERIDION'S SCOPE.            ║
+║ When they conflict, the comm block wins. Examples of overrides:      ║
+║   • "mirrors only" → skip all shower/tub/cabinet glass scope.        ║
+║   • "no shower glass — drive-thru shower" → skip shower even         ║
+║      if a shower is drawn on the plan.                               ║
+║   • "tubs not in our scope" → skip any tub-glass scope.              ║
+║   • "no cabinet glass" → skip otherItems even if glass-front         ║
+║      cabinets are shown.                                             ║
+║   • "only Primary Bath in scope" → only emit Primary Bath.           ║
+║ If the comm is empty, fall back to extracting everything visible     ║
+║ in the plans.                                                        ║
+╚═════════════════════════════════════════════════════════════════════╝
+
 Builder on this set: {{BUILDER}}
-Builder communication / context (may be empty): {{COMM}}
+
+Communication / scope notes from Erika:
+{{COMM}}
 
 PROCESS:
-1. Find the floor-plan sheet(s) and the cabinet-section / interior-elevation sheet(s). The cabinet-section sheet typically has labeled mirrors with sizes and shapes — those are authoritative for mirror specs.
-2. For every BATHROOM identified in the room schedule or labeled on the floor plan, capture its glass scope.
-3. Skip rooms with no glass scope: closets, garage, hallway, mudroom (unless it has a mirror), pantry (unless it has glass-front cabinets), bedrooms (unless ensuite), etc.
-4. If a bathroom is labeled "Tub w/ Tiled Walls" with no shower, it has NO shower glass — but it may still have a mirror.
-5. Collect non-bathroom glass scope (kitchen cabinet glass, pantry glass-front cabinets, custom art glass) under otherItems.
+1. First, read the comm block above. Note any scope inclusions/exclusions.
+2. Find the floor-plan sheet(s) and the cabinet-section / interior-elevation sheet(s). The cabinet-section sheet typically has labeled mirrors with sizes and shapes — those are authoritative for mirror specs.
+3. For every BATHROOM identified in the room schedule or labeled on the floor plan, capture its glass scope — but apply the comm-block scope filter from step 1.
+4. Skip rooms with no glass scope: closets, garage, hallway, mudroom (unless it has a mirror), pantry (unless it has glass-front cabinets), bedrooms (unless ensuite), etc.
+5. If a bathroom is labeled "Tub w/ Tiled Walls" with no shower, it has NO shower glass — but it may still have a mirror.
+6. Some showers are doorless walk-ins / "drive-thru" / wet-room style with NO glass enclosure. Clues: recessed/curbless floor, no glass door drawn, partition walls only, "wall-mount faucet on shelf" suggesting open-to-room flow. When ambiguous, flag it ("attn") rather than assuming glass.
+7. Collect non-bathroom glass scope (kitchen cabinet glass, pantry glass-front cabinets, custom art glass) under otherItems — but again, only if comm doesn't exclude it.
 
 WHAT TO LOOK FOR PER BATHROOM:
 - **Ceiling height** — from "Ceiling Height X'" labels on the floor plan.
