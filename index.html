@@ -3635,11 +3635,12 @@ PROCESS:
 7. Collect non-bathroom glass scope (kitchen cabinet glass, pantry glass-front cabinets, custom art glass) under otherItems — but again, only if comm doesn't exclude it.
 
 CABINET GLASS — special handling:
-- Look at every cabinet-section / kitchen-elevation sheet for doors labeled "Glass."
-- For each Glass-labeled door (or group of identical doors in the same cabinet bay), calculate WIDTH and HEIGHT using the sheet scale and reference dimensions on that sheet (e.g. an overall "10'" cabinet height with a "5'-6\\"" upper section tells you the upper cabinet zone is 66" tall; if that zone has two equal-height doors stacked, each is ~33" tall less stiles).
-- Emit ONE otherItems entry per cabinet bay/group, with size and count. Group identical-sized doors. Example: a Kitchen 2 elevation with 8 glass doors arranged as 4 pairs of 2 doors each, where each pair is the same width but pairs vary, would be 4 entries.
-- Always include the scale + sheet reference in the notes (e.g. "Kitchen 2 elevation, 3/4\\" = 1' scale — calculated, not labeled").
-- Set conf="med" since the dimensions are calculated from scale, not explicitly labeled. Add an "info" flag: "Cabinet glass dims calculated from scale — verify with cabinet maker before fab."
+- Identify cabinet-section / kitchen-elevation sheets that show doors labeled "Glass."
+- Count the glass doors visible on each elevation (e.g. "Kitchen 1 elevation has 8 glass-front upper doors").
+- Identify the location and bay layout (e.g. "left bay near MW: 2 doors", "center bays: 4 doors", "right bay near fridge: 2 doors").
+- **DO NOT calculate or estimate door dimensions from the elevation.** Cabinet glass doors are almost never explicitly labeled with W × H, and visual estimation from scale produces dims that are routinely 20-30% off — wrong enough to be misleading rather than helpful. Set size = "MEASURE ON PLAN" and conf = "low".
+- Add an "attn" flag with this exact text: "Cabinet glass dims not labeled on plan — measure each door using the PDF's Distance Tool at the sheet's scale, or confirm with the cabinet maker. Auto-extraction reports count and location only."
+- ONLY emit calculated dims if the elevation explicitly labels each door's W × H — which is rare. When that happens, set conf = "high" and skip the attn flag.
 
 WHAT TO LOOK FOR PER BATHROOM:
 - **Ceiling height** — from "Ceiling Height X'" labels on the floor plan.
