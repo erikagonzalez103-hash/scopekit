@@ -3636,11 +3636,28 @@ PROCESS:
 
 CABINET GLASS — special handling:
 - Identify cabinet-section / kitchen-elevation sheets that show doors labeled "Glass."
-- Count the glass doors visible on each elevation (e.g. "Kitchen 1 elevation has 8 glass-front upper doors").
-- Identify the location and bay layout (e.g. "left bay near MW: 2 doors", "center bays: 4 doors", "right bay near fridge: 2 doors").
-- **DO NOT calculate or estimate door dimensions from the elevation.** Cabinet glass doors are almost never explicitly labeled with W × H, and visual estimation from scale produces dims that are routinely 20-30% off — wrong enough to be misleading rather than helpful. Set size = "MEASURE ON PLAN" and conf = "low".
-- Add an "attn" flag with this exact text: "Cabinet glass dims not labeled on plan — measure each door using the PDF's Distance Tool at the sheet's scale, or confirm with the cabinet maker. Auto-extraction reports count and location only."
-- ONLY emit calculated dims if the elevation explicitly labels each door's W × H — which is rare. When that happens, set conf = "high" and skip the attn flag.
+- Count the glass doors visible on each elevation and identify the bay layout (e.g. "left bay near MW: 2 doors", "center bays: 4 doors", "right bay near fridge: 2 doors").
+
+DISTANCE TOOL ANNOTATIONS (the user's measurements added to the PDF):
+- PDF Distance Tool markings appear as colored arrows or triangles (typically grey or red) with a label like "0.62 in" or "0.99 in." These are PAPER MEASUREMENTS the user added — NOT architectural dimensions printed by the architect.
+- When you see one, multiply the value by the SHEET'S scale multiplier to get the real-world dimension:
+   - 1/8" = 1' scale → ×96 · 1/4" = 1' → ×48 · 3/8" = 1' → ×32
+   - 1/2" = 1' → ×24 · 3/4" = 1' → ×16 · 1" = 1' → ×12
+- Example: at 3/4" = 1' scale, a "0.62 in" Distance Tool annotation on a door's width = 0.62 × 16 = 9.92" ≈ 10" actual.
+
+INFERENCE — propagate measurements across visually-identical doors:
+- The user will NOT mark up every door. They mark a representative one (or two) per unique pattern. YOU propagate.
+- If a width measurement is given on one door and other doors in the SAME bay (pair, group) appear visually identical, apply that width to all of them.
+- If all glass doors in a row share the same visual HEIGHT, a single height measurement applies to every door in the row.
+- If multiple bays are visually identical (same width, same proportions), one bay's measurement applies to all the matching ones.
+- A bay that is visually DIFFERENT (clearly wider, narrower, taller, or differently proportioned) needs its own measurement — flag it if no measurement is provided.
+
+OUTPUT:
+- Emit ONE otherItems entry per VISUALLY DISTINCT bay/group. If 4 bays look identical, that's 1 entry with count = total doors across all 4. If bays differ, multiple entries.
+- In the notes field, say HOW you got the size: "measured directly via Distance Tool" vs. "inferred from bay X — visually identical" vs. "no measurement, dims unknown."
+- For any group with NO measurement and no visually-identical group with one, set size = "MEASURE ON PLAN", conf = "low", and add an "attn" flag asking the user to mark up that bay.
+- ONLY treat dims as confident (conf="high") if they came directly or by propagation from a Distance Tool annotation. Architectural-label dims (rare for cabinet glass) are also "high".
+- Do NOT estimate dims from visual proportion alone — that path is too unreliable to put in a quote.
 
 WHAT TO LOOK FOR PER BATHROOM:
 - **Ceiling height** — from "Ceiling Height X'" labels on the floor plan.
