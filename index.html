@@ -3620,6 +3620,12 @@ Communication / scope notes from Erika:
 {{COMM}}
 
 PROCESS:
+0. **SCALE CHECK FIRST — on every sheet, before reading any dimensions.** Each sheet has a scale annotation in the title block (bottom-right corner) or under section labels (e.g. "Kitchen 2 — Scale: 3/4\\" = 1'"). Different sheets routinely use different scales:
+   - Floor plans: typically 1/4" = 1' (so 1" on paper = 48" actual)
+   - Elevations / cabinet section views: typically 3/4" = 1' (1" on paper = 16" actual) or 1/2" = 1'
+   - Site plans: 1/6" = 1' or smaller
+   - Detail drawings: 1" = 1' or larger
+   Note the scale of each sheet you reference. When a dimension isn't explicitly labeled, calculate it from the drawing's relative proportions and the SHEET'S OWN scale. Always cite the sheet + scale you used in the value or notes (e.g. "calculated from Kitchen 2 elevation, 3/4\\" scale").
 1. First, read the comm block above. Note any scope inclusions/exclusions.
 2. Find the floor-plan sheet(s) and the cabinet-section / interior-elevation sheet(s). The cabinet-section sheet typically has labeled mirrors with sizes and shapes — those are authoritative for mirror specs.
 3. For every BATHROOM identified in the room schedule or labeled on the floor plan, capture its glass scope — but apply the comm-block scope filter from step 1.
@@ -3627,6 +3633,13 @@ PROCESS:
 5. If a bathroom is labeled "Tub w/ Tiled Walls" with no shower, it has NO shower glass — but it may still have a mirror.
 6. Some showers are doorless walk-ins / "drive-thru" / wet-room style with NO glass enclosure. Clues: recessed/curbless floor, no glass door drawn, partition walls only, "wall-mount faucet on shelf" suggesting open-to-room flow. When ambiguous, flag it ("attn") rather than assuming glass.
 7. Collect non-bathroom glass scope (kitchen cabinet glass, pantry glass-front cabinets, custom art glass) under otherItems — but again, only if comm doesn't exclude it.
+
+CABINET GLASS — special handling:
+- Look at every cabinet-section / kitchen-elevation sheet for doors labeled "Glass."
+- For each Glass-labeled door (or group of identical doors in the same cabinet bay), calculate WIDTH and HEIGHT using the sheet scale and reference dimensions on that sheet (e.g. an overall "10'" cabinet height with a "5'-6\\"" upper section tells you the upper cabinet zone is 66" tall; if that zone has two equal-height doors stacked, each is ~33" tall less stiles).
+- Emit ONE otherItems entry per cabinet bay/group, with size and count. Group identical-sized doors. Example: a Kitchen 2 elevation with 8 glass doors arranged as 4 pairs of 2 doors each, where each pair is the same width but pairs vary, would be 4 entries.
+- Always include the scale + sheet reference in the notes (e.g. "Kitchen 2 elevation, 3/4\\" = 1' scale — calculated, not labeled").
+- Set conf="med" since the dimensions are calculated from scale, not explicitly labeled. Add an "info" flag: "Cabinet glass dims calculated from scale — verify with cabinet maker before fab."
 
 WHAT TO LOOK FOR PER BATHROOM:
 - **Ceiling height** — from "Ceiling Height X'" labels on the floor plan.
@@ -3684,7 +3697,15 @@ Return JSON ONLY, no markdown fences, no preamble. Schema:
     }
   ],
   "otherItems": [
-    { "type": "cabinet-glass", "location": "kitchen", "value": "Glass-front upper cabinets — quantity TBD from cabinet-section sheet" }
+    {
+      "type": "cabinet-glass",
+      "location": "kitchen",
+      "sublocation": "Kitchen 2 elevation · left bay",
+      "size": "~14\\" × 30\\"",
+      "count": 2,
+      "value": "Glass-front upper doors",
+      "notes": "Calculated from Kitchen 2 elevation, 3/4\\" = 1' scale — verify with cabinet maker"
+    }
   ],
   "scaleStatus": null
 }
@@ -5598,14 +5619,17 @@ function openCutList() {
   otherItems.forEach(item => {
     const loc = (item.location || 'other').toUpperCase();
     const itemType = item.type || 'other';
-    const value = (item.value || '').trim();
-    if (!value) return;
+    const sub = item.sublocation || '';
+    const size = item.size || '—';
+    const count = item.count || 1;
+    const value = (item.value || '').trim() || itemType.replace(/-/g, ' ');
+    const notes = item.notes || 'From extraction · confirm with builder';
     html += `
       <div class="cutlist-block">
         <div class="cutlist-block-h">
           <span class="cutlist-block-loc">${escapeHtml(loc)}</span>
-          <span class="cutlist-block-title">${escapeHtml(itemType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</span>
-          <span class="cutlist-block-qty">× 1</span>
+          <span class="cutlist-block-title">${escapeHtml(itemType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}${sub ? ' · ' + escapeHtml(sub) : ''}</span>
+          <span class="cutlist-block-qty">× ${count}</span>
         </div>
         <table class="cutlist-table">
           <colgroup>
@@ -5617,9 +5641,9 @@ function openCutList() {
           <tbody>
             <tr>
               <td><strong>${escapeHtml(value)}</strong></td>
-              <td class="cutlist-size">—</td>
-              <td class="cutlist-qty">—</td>
-              <td class="cutlist-notes">From extraction · confirm with builder</td>
+              <td class="cutlist-size">${escapeHtml(size)}</td>
+              <td class="cutlist-qty">${count}</td>
+              <td class="cutlist-notes">${escapeHtml(notes)}</td>
             </tr>
           </tbody>
         </table>
