@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>ScopeKit · Eridion</title>
 <meta name="theme-color" content="#24324D" />
+<!-- pdf.js for client-side PDF text-layer extraction (Phase 1a) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -846,6 +854,67 @@ a { color: var(--navy); }
 .walls-opt input { margin-top: 2px; accent-color: var(--green); }
 .walls-opt input:checked ~ span { font-weight: 500; }
 .walls-opt:has(input:checked) { border-color: var(--green); background: var(--tint-green); }
+
+/* ===== Phase 1a: Ask-user modal ===== */
+.askmodal-backdrop {
+  position: fixed; inset: 0; background: rgba(20, 24, 36, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; padding: 20px;
+}
+.askmodal {
+  background: var(--paper); border-radius: 12px;
+  max-width: 560px; width: 100%; padding: 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+.askmodal h3 {
+  font-family: var(--serif, 'Fraunces', serif);
+  font-size: 22px; margin: 0 0 8px; color: var(--ink);
+}
+.askmodal .askmodal-sub {
+  font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.5;
+}
+.askmodal .askmodal-context {
+  font-size: 12px; font-family: var(--mono); background: #F4F4F0;
+  border-left: 3px solid var(--navy); padding: 10px 12px; border-radius: 4px;
+  margin-bottom: 18px; color: var(--body); white-space: pre-wrap; max-height: 160px;
+  overflow-y: auto;
+}
+.askmodal-opts { display: flex; flex-direction: column; gap: 8px; }
+.askmodal-opt {
+  display: block; padding: 12px 14px;
+  border: 1px solid var(--hairline); border-radius: 8px;
+  background: white; cursor: pointer; text-align: left;
+  font-size: 14px; color: var(--body); transition: all 0.15s;
+}
+.askmodal-opt:hover { border-color: var(--navy); background: #FAFAFA; }
+.askmodal-opt.is-recommended { border-color: var(--green); background: #F4FAF3; }
+.askmodal-opt .opt-label { font-weight: 600; color: var(--ink); }
+.askmodal-opt .opt-desc { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.askmodal-custom { display: flex; gap: 8px; margin-top: 8px; }
+.askmodal-custom input {
+  flex: 1; padding: 10px 12px; border: 1px solid var(--hairline);
+  border-radius: 6px; font-size: 14px; font-family: var(--mono);
+}
+.askmodal-custom button {
+  padding: 10px 16px; background: var(--navy); color: white;
+  border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+/* ===== Phase 1a: Provenance badge ===== */
+.prov-badge {
+  display: inline-block; font-family: var(--mono); font-size: 10px;
+  padding: 2px 6px; border-radius: 3px; margin-left: 6px;
+  background: #EEF4F0; color: var(--green-dark);
+  border: 1px solid rgba(83, 150, 79, 0.3);
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+.prov-badge.prov-vision {
+  background: #F4F0E8; color: #8B6B2A;
+  border-color: rgba(184, 116, 43, 0.3);
+}
+.prov-badge.prov-manual {
+  background: #E8EEF4; color: #2A5B8B;
+  border-color: rgba(43, 91, 184, 0.3);
+}
 
 /* ===== Mirror calc card ===== */
 .mirror-card {
@@ -3127,6 +3196,241 @@ const SKETCH_OPTIONS = [
   { id: 'sliding',    label: 'Bypass slider',  svg: '<rect x="6" y="14" width="48" height="32" fill="none" stroke="#24324D" stroke-width="2"/><line x1="30" y1="14" x2="30" y2="46" stroke="#53964F" stroke-width="2"/><line x1="22" y1="14" x2="22" y2="46" stroke="#53964F" stroke-width="2" opacity="0.5"/>' },
 ];
 
+// =============== TEXT-LAYER EXTRACTION (Phase 1a) ===============
+// Uses pdf.js to pull literal text strings from each PDF page BEFORE we
+// ask the vision model anything. Labels like "Mirror Size: 36" x 42"" are
+// in the text layer of Revit/AutoCAD-exported plans, so we can quote them
+// verbatim instead of letting the model invent dimensions from wall widths.
+
+async function extractPdfTextLayers(file) {
+  // Returns: [{ pageNum, viewport: {width, height}, items: [{str, x, y, width, height}] }]
+  if (!window.pdfjsLib) {
+    console.warn('[ScopeKit TL] pdf.js not loaded — text layer extraction skipped');
+    return null;
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.0 });
+    const textContent = await page.getTextContent();
+    const items = textContent.items.map(it => {
+      const t = it.transform; // [a, b, c, d, e, f] — e,f = x,y in PDF coords (origin bottom-left)
+      return {
+        str: it.str,
+        x: t[4],
+        y: viewport.height - t[5], // flip to top-left origin to match visual reading order
+        width: it.width || 0,
+        height: it.height || 0,
+      };
+    }).filter(it => it.str && it.str.trim().length > 0);
+    pages.push({ pageNum: i, viewport: { width: viewport.width, height: viewport.height }, items });
+  }
+  return pages;
+}
+
+// Find mirror size labels — looks for "Mirror Size: W x H" patterns.
+// Returns: [{ pageNum, raw, widthIn, heightIn, value, x, y }]
+function findMirrorLabels(textLayers) {
+  if (!textLayers) return [];
+  const found = [];
+  // Match patterns: "Mirror Size: 36" x 42"", "Mirror Size 36 x 42", "Mirror: 36×42", etc.
+  // Also handles unicode multiplication sign × and straight x.
+  const mirrorRegex = /mirror\s*(?:size)?\s*[:.]?\s*(\d{2,3})\s*["\u2033]?\s*[x\u00d7\u2715]\s*(\d{2,3})\s*["\u2033]?/i;
+
+  for (const page of textLayers) {
+    // Combine adjacent text items into "lines" since pdf.js splits aggressively
+    // We do this by clustering items with similar y-coordinates (within 4px).
+    const lines = clusterItemsIntoLines(page.items);
+    for (const line of lines) {
+      const text = line.items.map(i => i.str).join(' ');
+      const m = text.match(mirrorRegex);
+      if (m) {
+        const w = parseInt(m[1], 10);
+        const h = parseInt(m[2], 10);
+        // Sanity: mirrors are typically 18-96 inches in each dim
+        if (w >= 18 && w <= 96 && h >= 18 && h <= 96) {
+          found.push({
+            pageNum: page.pageNum,
+            raw: text.trim(),
+            widthIn: w,
+            heightIn: h,
+            value: w + '" x ' + h + '"',
+            x: line.x,
+            y: line.y,
+          });
+        }
+      }
+    }
+  }
+  return found;
+}
+
+// Find room labels — looks for bath-related room names with their positions.
+// Returns: [{ pageNum, name, x, y }]
+function findRoomLabelsTL(textLayers) {
+  if (!textLayers) return [];
+  const found = [];
+  // Match patterns for bathroom room labels — must be relatively standalone (not part of a sentence)
+  // Includes ordinal numbers, primary/master/half/powder variants
+  const roomRegex = /^\s*(primary\s+bath(?:room)?|master\s+bath(?:room)?|primary\s+water\s+closet|powder\s+(?:bath|room)?|half\s+bath|hall\s+bath|jack\s*(?:and|&|n)?\s*jill(?:\s+bath)?|ensuite|guest\s+bath|kids?\s+bath|bath\s+\d+|bathroom\s+\d+|wc\s*\d*)\s*$/i;
+
+  for (const page of textLayers) {
+    const lines = clusterItemsIntoLines(page.items);
+    for (const line of lines) {
+      const text = line.items.map(i => i.str).join(' ').trim();
+      const m = text.match(roomRegex);
+      if (m) {
+        found.push({
+          pageNum: page.pageNum,
+          name: text,  // preserve original casing
+          x: line.x,
+          y: line.y,
+        });
+      }
+    }
+  }
+  return found;
+}
+
+// Group text items into "lines" by Y coordinate (since pdf.js splits aggressively).
+function clusterItemsIntoLines(items) {
+  if (!items || !items.length) return [];
+  // Sort by y then x
+  const sorted = items.slice().sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  const lines = [];
+  const yTolerance = 4; // pixels — items within this y-distance are same line
+  for (const it of sorted) {
+    const line = lines.find(l => Math.abs(l.y - it.y) <= yTolerance);
+    if (line) {
+      line.items.push(it);
+      line.x = Math.min(line.x, it.x);
+    } else {
+      lines.push({ y: it.y, x: it.x, items: [it] });
+    }
+  }
+  // Sort each line's items by x for readable string assembly
+  lines.forEach(l => l.items.sort((a, b) => a.x - b.x));
+  return lines;
+}
+
+// Match mirror labels to bath rooms by page + spatial proximity.
+// Returns: { [roomName]: { mirror, distance } } — only confident matches; ambiguous ones omitted.
+// Strategy: for each mirror label, find the closest room label on the SAME PAGE.
+// If a single room is unambiguously nearest, link them. If the same room is the closest
+// match for multiple mirrors, both link (multi-vanity bath).
+function associateLabelsToRooms(mirrorLabels, roomLabels) {
+  const associations = []; // [{ mirror, room, distance }]
+  for (const m of mirrorLabels) {
+    const sameSheet = roomLabels.filter(r => r.pageNum === m.pageNum);
+    if (sameSheet.length === 0) continue; // no rooms on this sheet
+    // Compute distance to each room on same page
+    const scored = sameSheet.map(r => ({
+      room: r,
+      distance: Math.sqrt(Math.pow(m.x - r.x, 2) + Math.pow(m.y - r.y, 2)),
+    })).sort((a, b) => a.distance - b.distance);
+    const closest = scored[0];
+    const secondClosest = scored[1];
+    // Confident if closest is meaningfully closer than runner-up (>1.5x ratio) OR alone
+    const isConfident = !secondClosest || (secondClosest.distance > closest.distance * 1.5);
+    associations.push({ mirror: m, room: closest.room, distance: closest.distance, confident: isConfident });
+  }
+  return associations;
+}
+
+// Master entry: extract text layers from all uploaded PDFs and return findings.
+// Returns: { mirrors: [...], rooms: [...], associations: [...], rawByFile: {...} }
+async function runTextLayerExtraction(files) {
+  const result = { mirrors: [], rooms: [], associations: [], pagesByFile: {} };
+  for (const file of files) {
+    const mime = (file.type || '').toLowerCase();
+    const isPdf = mime === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!isPdf) continue;
+    try {
+      const pages = await extractPdfTextLayers(file);
+      if (!pages) continue;
+      result.pagesByFile[file.name] = pages;
+      const mirrors = findMirrorLabels(pages);
+      const rooms = findRoomLabelsTL(pages);
+      // Tag with source file for provenance
+      mirrors.forEach(m => m.sourceFile = file.name);
+      rooms.forEach(r => r.sourceFile = file.name);
+      result.mirrors.push(...mirrors);
+      result.rooms.push(...rooms);
+    } catch (e) {
+      console.warn('[ScopeKit TL] failed to extract text from', file.name, e);
+    }
+  }
+  result.associations = associateLabelsToRooms(result.mirrors, result.rooms);
+  console.log('[ScopeKit TL] Text-layer findings:', {
+    mirrorCount: result.mirrors.length,
+    roomCount: result.rooms.length,
+    associationCount: result.associations.length,
+  });
+  return result;
+}
+
+// =============== ASK-USER MODAL (Phase 1a) ===============
+// Generic Promise-returning prompt for uncertainty handling during extraction.
+// Usage:
+//   const answer = await askUserModal({
+//     title: 'Which bath does this mirror belong to?',
+//     subtitle: '...',
+//     context: 'Mirror Size: 36" x 42" — found on page 7',
+//     options: [{value: 'primary-bath', label: 'Primary Bath', desc: 'Most likely', recommended: true}, ...],
+//     allowCustom: true, customLabel: 'Enter mirror size manually',
+//   });
+function askUserModal({ title, subtitle, context, options, allowCustom, customLabel, customPlaceholder }) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'askmodal-backdrop';
+    const modal = document.createElement('div');
+    modal.className = 'askmodal';
+    let html = '<h3>' + escapeHtml(title) + '</h3>';
+    if (subtitle) html += '<div class="askmodal-sub">' + escapeHtml(subtitle) + '</div>';
+    if (context) html += '<div class="askmodal-context">' + escapeHtml(context) + '</div>';
+    html += '<div class="askmodal-opts">';
+    (options || []).forEach((opt, i) => {
+      html += '<button class="askmodal-opt' + (opt.recommended ? ' is-recommended' : '') + '" data-idx="' + i + '">'
+           +  '<div class="opt-label">' + escapeHtml(opt.label) + (opt.recommended ? ' · recommended' : '') + '</div>'
+           +  (opt.desc ? '<div class="opt-desc">' + escapeHtml(opt.desc) + '</div>' : '')
+           +  '</button>';
+    });
+    html += '</div>';
+    if (allowCustom) {
+      html += '<div class="askmodal-custom">'
+           +  '<input type="text" id="askmodal-custom-in" placeholder="' + escapeHtml(customPlaceholder || 'Enter custom value') + '" />'
+           +  '<button id="askmodal-custom-btn">' + escapeHtml(customLabel || 'Use this') + '</button>'
+           +  '</div>';
+    }
+    modal.innerHTML = html;
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    modal.querySelectorAll('.askmodal-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        cleanup();
+        resolve({ chosen: options[idx], custom: null });
+      });
+    });
+    if (allowCustom) {
+      const customBtn = modal.querySelector('#askmodal-custom-btn');
+      const customIn = modal.querySelector('#askmodal-custom-in');
+      const submitCustom = () => {
+        const val = (customIn.value || '').trim();
+        if (!val) return;
+        cleanup();
+        resolve({ chosen: null, custom: val });
+      };
+      customBtn.addEventListener('click', submitCustom);
+      customIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitCustom(); });
+    }
+    function cleanup() { backdrop.remove(); }
+  });
+}
+
 // =============== STATE ===============
 const state = {
   step: 'intake',
@@ -3458,7 +3762,18 @@ async function runExtraction() {
       // If the extraction surfaced job header info, persist address.
       if (fmData?.job?.address && !state.address) state.address = fmData.job.address;
     } else if (API_CONFIG.workerUrl) {
+      // Phase 1a: run text-layer extraction FIRST to capture literal labels
+      // (mirror sizes, room names). These become ground truth for the review.
+      let textLayerData = null;
+      try {
+        textLayerData = await runTextLayerExtraction(state.planFiles);
+      } catch (tlErr) {
+        console.warn('[ScopeKit] Text-layer extraction failed (continuing with vision only):', tlErr);
+      }
       extractionResult = await extractViaWorker();
+      if (textLayerData) {
+        extractionResult = await overrideMirrorsFromTextLayer(extractionResult, textLayerData);
+      }
     } else if (state.intakeMode === 'builder' && state.comm && state.comm.trim().length > 20) {
       // In-artifact preview: use Claude to actually parse the comm block.
       // Plan PDF parsing requires the Worker (pdf.js + raster vision pipeline).
@@ -3613,11 +3928,13 @@ async function extractViaWorker() {
 
   // ────────── PASS 2: Per-bath deep dive ──────────
   console.log('[ScopeKit] Pass 2: extracting per-bath detail…');
-  const roomList = rooms.map((r, i) =>
-    '  ' + (i+1) + '. "' + r.name + '"' +
-    (r.sheetReference ? ' (sheet ' + r.sheetReference + ')' : '') +
-    (r.approxLocation ? ' — ' + r.approxLocation : '')
-  ).join('\n');
+  const roomList = rooms.map((r, i) => {
+    let line = '  ' + (i+1) + '. "' + r.name + '"';
+    if (r.sheetReference) line += ' (sheet ' + r.sheetReference + ')';
+    if (r.approxLocation) line += ' — ' + r.approxLocation;
+    if (r.wetAreaEvidence) line += '\n     WET AREA EVIDENCE (authoritative from floor plan): ' + r.wetAreaEvidence;
+    return line;
+  }).join('\n');
   const p2Prompt = BATH_DETAIL_PROMPT
     .replace('{{BUILDER}}', builder)
     .replace('{{COMM}}', comm)
@@ -3665,26 +3982,61 @@ async function extractViaWorker() {
 }
 
 // ── ROOM_ID_PROMPT — Pass 1 of two-pass extraction.
-// Sole job: identify which bathrooms exist and where they live in the plan set.
-// No specs, no dimensions, no hardware. Keep this prompt SMALL & FOCUSED.
-const ROOM_ID_PROMPT = `You are an Eridion Glass scope estimator looking at architectural plans. Your only job in THIS pass is to identify which BATHROOMS exist in the plan set.
+// Identifies bathrooms AND captures what the FLOOR PLAN ACTUALLY DRAWS in
+// each one's wet area. The wetAreaEvidence field is critical — it's the
+// authoritative anchor Pass 2 uses for shower-vs-tub, preventing the model
+// from misapplying data from a fixture schedule on another page.
+const ROOM_ID_PROMPT = `You are an Eridion Glass scope estimator looking at architectural plans. Your job in THIS pass is to (a) identify which BATHROOMS exist in the plan set and (b) capture what the floor plan actually DRAWS in each one's wet area.
 
 Builder on this set: {{BUILDER}}
 
 Communication / scope notes from Erika:
 {{COMM}}
 
-WHAT TO DO:
+═══════════════════════════════════════════════════════════════════════
+STEP 1 — Identify bathrooms
+═══════════════════════════════════════════════════════════════════════
 1. Find the room schedule (usually on the floor-plan sheet, labeled "Room Schedule" or "Room Finishes"). Read EVERY room labeled as a bathroom there.
-2. Cross-reference with the floor-plan sheets — every door/space labeled "Bath", "Bathroom", "Primary Bath", "Master Bath", "Powder", "Half Bath", "Jack and Jill", "Ensuite", etc.
-3. Use the EXACT label the plan uses. Do NOT rename "Bath 2" to "Hall Bath" or vice versa. Capitalization should match (TITLE Case or ALL CAPS — whatever the plan uses).
-4. If the comm block above restricts scope (e.g. "only Primary Bath in scope"), STILL list every bathroom you find — but add a flag noting it's out of scope.
+2. Cross-reference with the floor-plan sheets — every space labeled "Bath", "Bathroom", "Primary Bath", "Master Bath", "Powder", "Half Bath", "Jack and Jill", "Ensuite", etc.
+3. Use the EXACT label the plan uses. Do NOT rename "Bath 2" to "Hall Bath" or vice versa. Capitalization should match.
 
-WHAT NOT TO DO:
-- Do NOT include closets, mudrooms, hallways, bedrooms, kitchens, pantries, laundry. Those are handled separately.
-- Do NOT extract any shower/mirror/vanity specs in THIS pass. Just the names.
+═══════════════════════════════════════════════════════════════════════
+STEP 2 — Capture floor-plan wet-area evidence (CRITICAL — read carefully)
+═══════════════════════════════════════════════════════════════════════
+For EACH bathroom, look at its FLOOR PLAN drawing (not schedules, not elevations) and note what is actually drawn in the wet area. This is your AUTHORITATIVE evidence for shower-vs-tub later. Use these markers:
+
+TUB markers (room has a tub):
+- Rectangular fixture roughly 60"×30" or 60"×32" with a curved end (the faucet end)
+- Label "TUB", "Tub w/ Tiled Walls", "Soaking Tub", "Freestanding Tub", "B/T" (bath/tub), "Tub/Shower"
+- "F/G Tub" or "F/G Tub/Shower" = fiberglass tub or fiberglass tub/shower combo
+
+SHOWER markers (room has a shower — NOT a tub):
+- Rectangle with a giant "X" pattern (the tile-floor symbol with diagonals to corners)
+- Label "SHOWER", "Recessed Tiled Shower", "Walk-in Shower", "Tiled Shower"
+- Annotations inside the shower area: "Bench", "Rain Can", "Shampoo Box", "Niche", "Linear Drain"
+- These annotations are 100% shower indicators. If you see "Bench" + "Rain Can" + the X pattern, this is a tiled shower — it is NOT a tub.
+
+TUB + SHOWER combo:
+- Tub footprint with a glass panel drawn on one side, label "Tub/Shower" or similar
+
+NO GLASS ENCLOSURE:
+- Curbless walk-in with no door/panel drawn at the opening
+- Wall-mount faucet on a partition wall with no glass between bath and shower
+- Drive-thru / wet-room style
+
+EMIT the wetAreaEvidence field with the labels and markers you saw, verbatim where possible. Examples:
+- "X-pattern rectangle labeled 'Recessed Tiled Shower' with 'Bench', 'Rain Can', 'Shampoo Box' annotations. NO tub drawn."
+- "60×30 rectangle with curved end labeled 'F/G Tub/Shower'. Has glass panel on long side."
+- "Open recessed area, wall-mount faucet on partition wall. NO glass enclosure drawn."
+
+═══════════════════════════════════════════════════════════════════════
+WHAT NOT TO DO
+═══════════════════════════════════════════════════════════════════════
+- Do NOT include closets, mudrooms, hallways, bedrooms, kitchens, pantries, laundry.
+- Do NOT extract dimensions, mirror specs, or shower configurations here. Save that for Pass 2.
 - Do NOT invent rooms. If you can't read the label clearly, flag it as low confidence.
-- Do NOT collapse two distinct bathrooms into one (a common error is treating "Bath 2" and "Hall Bath" as the same room when they're actually different).
+- Do NOT collapse two distinct bathrooms into one.
+- Do NOT pull wet-area evidence from a fixture schedule. ONLY use the floor plan drawing.
 
 Return JSON ONLY, no markdown, no preamble. Schema:
 
@@ -3694,111 +4046,125 @@ Return JSON ONLY, no markdown, no preamble. Schema:
       "name": "Primary Bath",
       "sheetReference": "A2.0",
       "approxLocation": "upper-right of main floor plan",
+      "wetAreaEvidence": "X-pattern rectangle labeled 'Recessed Tiled Shower' with 'Bench', 'Rain Can', 'Shampoo Box' annotations. NO tub drawn. Opening to bath is ~4'-6\" wide, no swing door drawn.",
       "confidence": "high",
       "flags": []
     },
     {
       "name": "Bath 2",
       "sheetReference": "A2.0",
-      "approxLocation": "shared between Bed 2 and Bed 3 (Jack and Jill)",
+      "approxLocation": "off Bed 2",
+      "wetAreaEvidence": "60×30 rectangle with curved end labeled 'F/G Tub/Shower'. Standard alcove. Glass panel on long side.",
       "confidence": "high",
       "flags": []
     }
   ]
 }
 
-Fields:
-- name: EXACT room label from the plan. If different sheets disagree, prefer the room schedule.
-- sheetReference: the sheet number where you can see this room best (A2.0, A2.1, etc.). Null if unknown.
-- approxLocation: a 1-line spatial hint that will help the next pass re-find this room (e.g. "upper-right corner of 2nd floor plan", "off the master bedroom"). Keep under 80 chars.
-- confidence: "high" if explicitly labeled in schedule + plan; "med" if labeled in only one place; "low" if you had to guess.
-- flags: only fill if there's something the user MUST know — e.g. "Two adjacent rooms both labeled Bath 2 — confirm which is which" or "Room labeled differently on schedule vs. plan".
-
-Be exhaustive — every bathroom in the plan set must appear. Don't shorten the list "to keep it clean."`;
+Be exhaustive — every bathroom in the plan set must appear with wetAreaEvidence filled.`;
 
 // ── BATH_DETAIL_PROMPT — Pass 2 of two-pass extraction.
-// Takes the room list from Pass 1 and does focused per-bath spec extraction
-// with EXPLICIT visual heuristics so the model doesn't confuse panels with doors.
-const BATH_DETAIL_PROMPT = `You are an Eridion Glass scope estimator. Pass 1 already identified which bathrooms exist. Your job NOW is to extract the glass scope for EACH ONE.
+// Takes the room list (with wetAreaEvidence from Pass 1) and does per-bath
+// spec extraction. Floor plan evidence WINS over schedule data when they
+// conflict. Closed-list shower types. Cross-page contamination forbidden.
+const BATH_DETAIL_PROMPT = `You are an Eridion Glass scope estimator. Pass 1 already identified which bathrooms exist AND captured what each bath's floor plan actually draws. Your job NOW is to extract the glass scope for EACH ONE.
 
 Builder on this set: {{BUILDER}}
 
 Communication / scope notes from Erika:
 {{COMM}}
 
-BATHROOMS TO EXTRACT (from Pass 1 — these are authoritative; do not add or drop any):
+═══════════════════════════════════════════════════════════════════════
+COMM-OVERRIDE PATTERNS — READ FIRST, APPLY BEFORE EXTRACTING ANYTHING
+═══════════════════════════════════════════════════════════════════════
+The plans tell you WHAT EXISTS. The comm tells you WHAT IS IN ERIDION'S SCOPE.
+When they conflict, COMM WINS. Common patterns:
+
+FORWARD EXCLUSION patterns ("don't do X"):
+- "mirrors only" → all baths get shower scope skipped
+- "no shower glass" → all baths get shower scope skipped
+- "tubs not in scope" → skip any tub-glass scope
+- "no cabinet glass" → return otherItems: []
+
+INVERSE / RESTRICTIVE patterns ("only do X for Y") — TRICKY, READ CAREFULLY:
+- "Shower ONLY for Bath 3" → this means "shower glass is included ONLY for Bath 3, all OTHER baths get shower scope SKIPPED". For Primary Bath, Bath 2, Powder, etc. → shower neutral values. For Bath 3 → full shower spec.
+- "Shower glass only for Primary" → only Primary Bath has shower in scope; all others skip shower.
+- "Mirrors only except Primary" → Primary gets full scope; all others get mirrors only.
+- "We're doing only the Primary" → only Primary emitted with full scope; all other baths still listed but with all-neutral values (mirror = "out of scope", shower neutral, etc.)
+
+WHEN COMM EXCLUDES SHOWER FROM A BATH:
+- Still emit the bathroom record (mirrors may still be in scope).
+- Use NEUTRAL values for the excluded part:
+  - shower.type.value = "—"
+  - shower.dims.value = "—"
+  - shower.walls.layout = null
+  - shower.features = []
+- Add flag: { kind: "info", text: "Shower glass excluded by scope (per comm)" }
+
+If you're not 100% sure how to interpret the comm, ADD A FLAG to the affected bath asking the user to confirm — don't guess.
+
+═══════════════════════════════════════════════════════════════════════
+BATHROOMS TO EXTRACT (from Pass 1)
+═══════════════════════════════════════════════════════════════════════
 {{ROOM_LIST}}
 
-╔═════════════════════════════════════════════════════════════════════╗
-║ SCOPE OVERRIDES FROM COMM. The plans tell you WHAT EXISTS. The      ║
-║ comm tells you WHAT'S IN ERIDION'S SCOPE. When they conflict, comm  ║
-║ wins. Common overrides: "mirrors only", "no shower glass",          ║
-║ "drive-thru shower (no glass)", "tubs not in scope".                ║
-║ If comm excludes scope from a room, STILL emit the bathroom record  ║
-║ (mirrors may still be in scope) but use NEUTRAL values for the      ║
-║ excluded part (type/dims = "—", walls.layout = null, features=[]).  ║
-╚═════════════════════════════════════════════════════════════════════╝
+The "wet area evidence" line for each bath above is AUTHORITATIVE for shower-vs-tub determination. If a bath's wet area evidence shows shower markers (X-pattern, "Recessed Tiled Shower", "Bench", "Rain Can"), it is a SHOWER — even if a fixture schedule on another page lists "F/G Tub/Shower" for some bath. The floor plan is the source of truth; schedules can be wrong or apply to a different bath. NEVER cross-apply fixture data from another bath's row to this one.
 
 ═══════════════════════════════════════════════════════════════════════
-VISUAL HEURISTICS — READ THIS BEFORE LOOKING AT EACH BATH
+VISUAL HEURISTICS — READ BEFORE LOOKING AT EACH BATH
 ═══════════════════════════════════════════════════════════════════════
-These are the things the model historically gets wrong. Apply them carefully.
-
 A) DOOR vs FIXED PANEL — the #1 confusion
-- DOOR: drawn with a SWING ARC (a thin curved line showing the door's path of motion). On plan view, looks like a quarter-circle arc starting at the hinge point. The door leaf itself is a thin straight line at the open or closed position.
-- FIXED PANEL (also called "splash panel" or "stationary panel"): a straight glass line with NO swing arc. Often shown as a slightly thicker line, sometimes with a "GL" or "GLASS" label, sometimes with hatching.
-- KNEE WALL / PONY WALL: a SOLID wall element BELOW the glass — drawn as a filled rectangle (often hatched). The glass sits ON TOP of it. Glass mounted on a knee wall is still a panel (not a door).
-- If you see ONLY straight glass lines and no swing arc anywhere on the shower → the shower has NO door (curbless walk-in, doorless splash-panel design, or drive-thru).
+- DOOR: drawn with a SWING ARC (a thin curved line showing the door's path of motion). On plan view, looks like a quarter-circle arc starting at the hinge point.
+- FIXED PANEL: a straight glass line with NO swing arc. Often shown as a slightly thicker line, sometimes labeled "GL" or "GLASS".
+- KNEE WALL / PONY WALL: a SOLID wall element BELOW the glass — drawn as a filled rectangle (often hatched). Glass mounted on a knee wall is still a panel (not a door).
+- If you see ONLY straight glass lines and no swing arc anywhere on the shower → the shower has NO door.
 
-B) SHOWER TYPE — pick exactly ONE from this closed list
-- "inline-2"           — one fixed panel + one swinging door, in a straight line. Common.
-- "inline-2-no-door"   — two fixed panels meeting at a corner OR two panels in line, NO door. Doorless walk-in style.
-- "inline-3"           — fixed panel + door + fixed panel, all in line. Wider showers.
-- "alcove-3-wall"      — shower built into a 3-wall alcove with one glass face (door + optional panel).
-- "corner-2-wall"      — shower in a corner, two glass faces (often L-shape sliding or pivot).
-- "neo-angle"          — diamond/angled corner shower, 3 glass panels at 135° angles.
-- "curbless-walk-in"   — recessed floor, no curb, often with a single splash panel or no glass at all.
-- "tub-glass"          — bathtub with glass panel (frameless tub screen / tub-shower combo enclosure).
-- "drive-thru-no-glass" — open-to-room walk-in with NO glass enclosure. Common clues: wall-mount faucet on partition wall, no door/panel drawn, recessed floor leading to the shower area, partition walls only.
-- "tub-only"           — bathtub with tiled walls, NO shower / NO glass. (Walls.layout = null.)
-- If you genuinely cannot tell, use null + flag with kind="attn".
+B) SHOWER TYPE — pick exactly ONE from this closed list (use the FLOOR PLAN evidence first, then refine with elevations):
+- "inline-2"           — one fixed panel + one swinging door, in a straight line.
+- "inline-2-no-door"   — two fixed panels meeting at a corner OR two panels in line, NO door.
+- "inline-3"           — fixed panel + door + fixed panel, all in line.
+- "alcove-3-wall"      — shower in a 3-wall alcove with one glass face.
+- "corner-2-wall"      — shower in a corner, two glass faces.
+- "neo-angle"          — diamond/angled corner shower, 3 glass panels at 135°.
+- "curbless-walk-in"   — recessed floor, no curb, often single splash panel or no glass.
+- "tub-glass"          — bathtub with glass panel (frameless tub screen / tub-shower combo).
+- "drive-thru-no-glass" — open walk-in, NO glass enclosure.
+- "tub-only"           — bathtub with tiled walls, NO shower / NO glass.
+- "sliding-door"       — bypass / sliding glass doors (common in tub/shower combos or alcove showers).
+- null + "attn" flag if truly indeterminate.
 
-C) PANEL COUNT — count GLASS pieces, not wall faces
-- A "panel" = one rectangular piece of glass that gets cut at the shop.
-- A swinging door = 1 panel.
-- A fixed splash panel = 1 panel.
-- A 90° return panel (short panel returning to the wall to catch splash) = 1 panel.
-- Knee walls themselves are NOT panels (they're framing). But glass mounted ON a knee wall IS a panel.
-- Cite your count in the walls.hint field, e.g. "1 door + 1 fixed panel = 2 panels".
+C) PANEL COUNT — count GLASS pieces
+- Door = 1 panel. Fixed panel = 1 panel. 90° return = 1 panel.
+- Knee walls themselves are NOT panels; glass ON a knee wall IS a panel.
+- doorCount + fixedPanelCount = panelCount.
 
-D) MIRRORS — check the INTERIOR ELEVATIONS / CABINET SECTION sheets
-- Floor plans rarely show mirror specs. Look for a sheet labeled "Interior Elevations" or "Cabinet Sections" or "Bath Elevations".
-- Mirrors are typically labeled with size + shape (e.g. "36×42 Round Scalloped", "Squoval", "Broken Arch").
-- DECORATIVE shapes (Round Scalloped, Squoval, Broken Arch, Pill, Arched-Top, etc.) → ALWAYS add an "attn" flag because they need vendor sourcing, not in-shop fab.
-- A bathroom can have 1 mirror per vanity (e.g. 2 vanities = 2 mirrors).
+D) MIRRORS — check interior elevation / cabinet section sheets
+- Mirrors are labeled with size + shape (e.g. "36×42 Round Scalloped").
+- DECORATIVE shapes (Round Scalloped, Squoval, Broken Arch, Pill, Arched-Top) → ALWAYS add an "attn" flag (vendor sourcing).
+- A bath can have 1 mirror per vanity.
 
-E) CEILING HEIGHT — drives panel height for floor-to-ceiling glass
-- Check the floor plan for "Ceiling Height X'" labels per room, or a key in the title block.
-- Standard is 8'-0" or 9'-0"; Primary Baths often 10'-0".
-- This matters because frameless showers in 10' rooms need taller panels (premium pricing).
+E) CEILING HEIGHT — from "Ceiling Height X'" labels on the floor plan.
 
-F) FEATURES — only list things that ACTUALLY APPEAR in the plan, with evidence
-- "bench" — only if a built-in bench seat is drawn inside the shower.
-- "recessed shampoo niche" — only if a recessed rectangle is labeled "niche" inside a shower wall.
-- "knee wall" or "pony wall" — only if a solid wall element below glass is drawn. Note height if labeled (e.g. "36-inch knee wall").
-- "wall-mount faucet on knee wall" — strong signal for inline-2 doorless or knee-wall designs.
-- "linear drain" — drawn as a long narrow rectangle.
-- DO NOT list features that "might be there" — only list what's visible.
+F) FEATURES — only list what's drawn, with evidence:
+- "bench" — only if a built-in bench is drawn or labeled.
+- "recessed shampoo niche" — only if labeled "niche" or "Shampoo Box".
+- "knee wall" / "pony wall" — only if a solid wall below glass is drawn.
+- "linear drain" — long narrow rectangle in shower floor.
+- DO NOT list features that "might be there" — only what's visible.
+- DO NOT pull features from a schedule listing of a different bath.
 
 ═══════════════════════════════════════════════════════════════════════
-SCALE CHECK
+SOURCE-PRIORITY RULES (anti-contamination)
 ═══════════════════════════════════════════════════════════════════════
-Every sheet has a scale annotation in the title block (bottom-right). Floor plans typically 1/4" = 1', elevations typically 3/4" = 1' or 1/2" = 1'. Different sheets use different scales — always cite which sheet you used. When a dim is calculated rather than labeled, say so in the notes.
+1. FLOOR PLAN drawing of THIS bath = highest priority. Use the wet-area evidence from Pass 1.
+2. INTERIOR ELEVATIONS of THIS bath = use for mirror specs + door swing direction.
+3. FIXTURE SCHEDULE = use only when it ties a fixture model to THIS specific bath by row label (e.g. "Primary Bath: shower fixture XYZ"). NEVER cross-apply a schedule row from one bath to another.
+4. If schedule says X but floor plan shows Y, FLOOR PLAN WINS. Add a flag noting the discrepancy.
 
 ═══════════════════════════════════════════════════════════════════════
 OUTPUT
 ═══════════════════════════════════════════════════════════════════════
-Emit ONE bathroom record per room from the Pass 1 list above. Use the EXACT name from the list — do not rename.
+Emit ONE bathroom record per room from the Pass 1 list above. Use the EXACT name. Cite source evidence in walls.hint.
 
 Return JSON ONLY, no markdown, no preamble. Schema:
 
@@ -3810,8 +4176,8 @@ Return JSON ONLY, no markdown, no preamble. Schema:
       "ceiling": { "value": "10'-0\"", "conf": "high", "mode": "auto" },
       "shower": {
         "type": { "value": "inline-2", "conf": "high", "mode": "auto" },
-        "dims": { "value": "72\" × 42\"", "conf": "med", "mode": "auto" },
-        "features": ["bench", "recessed shampoo niche", "36\" knee wall with wall-mount faucet"],
+        "dims": { "value": "54\" × 100\"", "conf": "med", "mode": "auto" },
+        "features": ["bench", "rain can shower head", "recessed shampoo niche"],
         "walls": {
           "layout": "inline-2",
           "conf": "high",
@@ -3820,7 +4186,7 @@ Return JSON ONLY, no markdown, no preamble. Schema:
           "doorCount": 1,
           "fixedPanelCount": 1,
           "ambiguous": false,
-          "hint": "1 swing door (arc visible on east side) + 1 fixed panel on knee wall = 2 panels"
+          "hint": "Floor plan A2.0 shows X-pattern recessed tiled shower with Bench, Rain Can, Shampoo Box. 4'-6\" opening on east side with no swing arc drawn → likely 1 fixed panel + 1 door inferred (or curbless walk-in if no glass)."
         }
       },
       "vanity": {
@@ -3838,19 +4204,18 @@ Return JSON ONLY, no markdown, no preamble. Schema:
 }
 
 PER-BATH RULES:
-- name MUST match the Pass 1 list exactly (incl. capitalization).
-- shower.type.value MUST be one of the closed-list values from heuristic B above (or null + attn flag if truly indeterminate).
-- shower.walls.layout SHOULD match shower.type.value when applicable. If they differ, explain why in walls.hint.
-- shower.walls.panelCount = total glass pieces. doorCount + fixedPanelCount should equal panelCount.
-- shower.walls.hint MUST cite the visual evidence — e.g. "swing arc visible on east wall = door; west side is straight line with GL label = fixed panel".
-- If a bath has NO shower (tub-only or comm excludes), use neutral values: shower.type.value="—", dims="—", walls.layout=null, features=[].
-- For DECORATIVE mirror shapes → ALWAYS add a flag with kind="attn" calling out vendor sourcing.
-- For recessed/curbless showers → ALWAYS add a flag with kind="info" noting the curbless detail.
-- For knee walls → ALWAYS add a flag with kind="info" describing height + faucet position.
-- Per-field conf is high/med/low. High = explicitly labeled. Med = calculated from scale. Low = inferred / guess.
-- Set mode="auto" on every field (the review UI uses this to know it came from the model).
+- name MUST match the Pass 1 list exactly.
+- shower.type.value MUST be from the closed list (or null + attn flag).
+- shower.walls.hint MUST cite the SHEET + LABEL TEXT that justifies the shower type — e.g. "Floor plan A2.0 labels 'F/G Tub/Shower' = tub-glass" or "Floor plan A2.0 shows 'Recessed Tiled Shower' with bench = walk-in shower, NOT a tub regardless of any schedule entry".
+- If comm excludes shower from this bath, set neutral values + info flag (see comm-override section).
+- doorCount + fixedPanelCount = panelCount.
+- DECORATIVE mirror shape → ALWAYS attn flag (vendor sourcing).
+- Recessed/curbless shower → ALWAYS info flag (curbless detail affects threshold + drain).
+- Knee wall → ALWAYS info flag (height + faucet position).
+- Per-field conf: high = explicitly labeled. med = calculated. low = inferred.
+- Set mode="auto" on every field.
 
-Be CONSERVATIVE — if the plan doesn't show something clearly, set conf="low" and flag it rather than guessing.`;
+Be CONSERVATIVE — if the plan doesn't show something clearly, conf="low" + flag it. Do NOT pull data from a different bath's schedule row to fill gaps.`;
 
 // ── OTHER_ITEMS_PROMPT — Pass 3 of two-pass extraction.
 // Focuses ONLY on cabinet glass and other non-bath glass scope.
@@ -4338,6 +4703,95 @@ function mockExtraction() {
       { detected: 'Per page · varies', conf: 'med', warning: 'Hines profile: scale varies by page — verify each before quoting' } :
       { detected: '1/4" = 1\'-0"', conf: 'high', warning: null },
   };
+}
+
+// Override mirror values using text-layer findings.
+// Called from runExtraction after extractViaWorker returns.
+// If we find unambiguous "Mirror Size: X x Y" labels in the PDF text layer,
+// they REPLACE whatever the vision model invented for those baths.
+async function overrideMirrorsFromTextLayer(result, textLayerData) {
+  if (!textLayerData || !result || !Array.isArray(result.bathrooms)) return result;
+  const baths = result.bathrooms;
+  const assocs = textLayerData.associations || [];
+  const unmatched = []; // mirror labels we couldn't auto-assign
+
+  // Group associations by room name (lower-cased for comparison)
+  const byRoom = {};
+  for (const a of assocs) {
+    if (!a.confident) { unmatched.push(a.mirror); continue; }
+    const key = (a.room.name || '').toLowerCase().trim();
+    if (!byRoom[key]) byRoom[key] = [];
+    byRoom[key].push(a.mirror);
+  }
+
+  // For each bath, look up matching mirrors
+  for (const bath of baths) {
+    const bathKey = (bath.name || '').toLowerCase().trim();
+    // Fuzzy match: exact, or one contains the other (e.g. "Primary Bath" vs "Primary Bathroom")
+    let matches = byRoom[bathKey];
+    if (!matches) {
+      for (const k of Object.keys(byRoom)) {
+        if (bathKey.includes(k) || k.includes(bathKey)) {
+          matches = byRoom[k];
+          break;
+        }
+      }
+    }
+    if (matches && matches.length) {
+      const vanityCount = bath.vanity?.count || 1;
+      // If we have multiple mirror labels and they match vanity count, combine
+      const sizesStr = matches.length > 1
+        ? matches.length + 'x ' + matches[0].value + (matches.every(m => m.value === matches[0].value) ? '' : ' (sizes vary — see provenance)')
+        : (vanityCount > 1 ? vanityCount + 'x ' + matches[0].value : matches[0].value);
+      bath.mirror = {
+        value: sizesStr,
+        conf: 'high',
+        mode: 'auto',
+        _provenance: {
+          source: 'text-layer',
+          page: matches[0].pageNum,
+          file: matches[0].sourceFile,
+          raw: matches[0].raw,
+        },
+      };
+    } else if (bath.mirror) {
+      // No text-layer match — mark vision-sourced mirror as needing review
+      bath.mirror._provenance = bath.mirror._provenance || {
+        source: 'vision',
+        conf: bath.mirror.conf,
+      };
+      // Drop confidence so the review screen flags it
+      if (bath.mirror.conf === 'high') bath.mirror.conf = 'med';
+    }
+  }
+
+  // For unmatched mirror labels in the text layer, ask the user
+  for (const m of unmatched) {
+    if (!baths.length) break;
+    const answer = await askUserModal({
+      title: 'Which bath does this mirror belong to?',
+      subtitle: 'We found a mirror size on the plan but the room association was ambiguous.',
+      context: m.raw + '\n(found on page ' + m.pageNum + ')',
+      options: baths.map(b => ({
+        value: b.id,
+        label: b.name,
+        desc: 'Has ' + (b.vanity?.count || 0) + ' vanit' + ((b.vanity?.count || 0) === 1 ? 'y' : 'ies'),
+      })).concat([{ value: '__skip__', label: 'Skip — not a mirror for any of these baths', desc: 'e.g. it\'s in a closet or other room' }]),
+    });
+    if (answer.chosen && answer.chosen.value !== '__skip__') {
+      const bath = baths.find(b => b.id === answer.chosen.value);
+      if (bath) {
+        bath.mirror = {
+          value: m.value,
+          conf: 'high',
+          mode: 'manual',
+          _provenance: { source: 'text-layer', page: m.pageNum, file: m.sourceFile, raw: m.raw, manualAssigned: true },
+        };
+      }
+    }
+  }
+
+  return result;
 }
 
 function applyExtraction(result) {
@@ -6132,9 +6586,21 @@ function bathField(label, valObj, path, isDim=false, scalarLeaf=false) {
   if (!valObj) valObj = { value: '—', conf: 'med', mode: 'auto' };
   const conf = valObj.conf || 'med';
   const mode = valObj.mode || 'auto';
+  // Phase 1a: provenance badge — shows where this value came from
+  let provHtml = '';
+  if (valObj._provenance) {
+    const p = valObj._provenance;
+    if (p.source === 'text-layer') {
+      provHtml = `<span class="prov-badge" title="Quoted verbatim from PDF text: ${escapeHtml(p.raw || '')}">FROM PAGE ${p.page} · TEXT</span>`;
+    } else if (p.source === 'vision') {
+      provHtml = `<span class="prov-badge prov-vision" title="Inferred by vision model — verify against plan">VISION · VERIFY</span>`;
+    } else if (p.source === 'manual') {
+      provHtml = `<span class="prov-badge prov-manual" title="Set manually by user">MANUAL</span>`;
+    }
+  }
   return `
     <div class="bathfield">
-      <div class="bathfield-lbl">${escapeHtml(label)}</div>
+      <div class="bathfield-lbl">${escapeHtml(label)}${provHtml}</div>
       <input type="text" data-field="${escapeHtml(path)}" value="${escapeHtml(valObj.value || '')}" class="${isDim ? 'mono' : ''}" />
       <span class="conf ${conf}" data-toggle data-path="${escapeHtml(path)}" title="Tap to override (manual)">${conf.toUpperCase()} · ${mode.toUpperCase()}</span>
     </div>
