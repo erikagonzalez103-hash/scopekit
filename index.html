@@ -3267,30 +3267,67 @@ function findMirrorLabels(textLayers) {
   return found;
 }
 
-// Find room labels — looks for bath-related room names with their positions.
+// Find room labels — looks for bath-related room names anywhere in lines/items.
 // Returns: [{ pageNum, name, x, y }]
+// Uses substring (not full-line) matching because plan labels often appear
+// embedded in titles like "Primary Bath · Cabinet Section" or split across
+// pdf.js text runs.
 function findRoomLabelsTL(textLayers) {
   if (!textLayers) return [];
   const found = [];
-  // Match patterns for bathroom room labels — must be relatively standalone (not part of a sentence)
-  // Includes ordinal numbers, primary/master/half/powder variants
-  const roomRegex = /^\s*(primary\s+bath(?:room)?|master\s+bath(?:room)?|primary\s+water\s+closet|powder\s+(?:bath|room)?|half\s+bath|hall\s+bath|jack\s*(?:and|&|n)?\s*jill(?:\s+bath)?|ensuite|guest\s+bath|kids?\s+bath|bath\s+\d+|bathroom\s+\d+|wc\s*\d*)\s*$/i;
+
+  // Patterns are ordered most-specific-first so multi-word names are caught
+  // before partial matches (e.g. "Primary Water Closet" before "Primary").
+  // "Primary Water Closet" is intentionally listed so we can EXCLUDE it later
+  // (it's not a bath, but we don't want it absorbed into "Primary Bath").
+  const patterns = [
+    { re: /\bprimary\s+water\s+closet\b/i,                     name: (m) => 'Primary Water Closet', isBath: false },
+    { re: /\bmaster\s+water\s+closet\b/i,                      name: (m) => 'Master Water Closet',  isBath: false },
+    { re: /\bprimary\s+bath(?:room)?\b/i,                       name: (m) => 'Primary Bath' },
+    { re: /\bmaster\s+bath(?:room)?\b/i,                        name: (m) => 'Master Bath' },
+    { re: /\bjack\s*(?:and|&|n)?\s*jill(?:\s+bath)?\b/i,      name: (m) => 'Jack and Jill' },
+    { re: /\bpowder\s+(?:bath|room)\b/i,                        name: (m) => 'Powder Room' },
+    { re: /\bhalf\s+bath\b/i,                                   name: (m) => 'Half Bath' },
+    { re: /\bhall\s+bath\b/i,                                   name: (m) => 'Hall Bath' },
+    { re: /\bguest\s+bath(?:room)?\b/i,                         name: (m) => 'Guest Bath' },
+    { re: /\bkids?\s+bath(?:room)?\b/i,                         name: (m) => 'Kids Bath' },
+    { re: /\bensuite\b/i,                                        name: (m) => 'Ensuite' },
+    { re: /\bbath(?:room)?\s+(\d+)\b/i,                        name: (m) => 'Bath ' + m[1] },
+    { re: /\bwc\s*(\d*)\b/i,                                   name: (m) => 'WC' + (m[1] ? ' ' + m[1] : '') },
+  ];
 
   for (const page of textLayers) {
+    // Try matching on individual text items first (often labels are atomic in pdf.js)
+    for (const it of page.items) {
+      tryMatchAndPush(it.str, it.x, it.y, page.pageNum);
+    }
+    // Then on clustered lines (catches multi-item labels like "Primary" + " " + "Bath")
     const lines = clusterItemsIntoLines(page.items);
     for (const line of lines) {
       const text = line.items.map(i => i.str).join(' ').trim();
-      const m = text.match(roomRegex);
+      tryMatchAndPush(text, line.x, line.y, page.pageNum);
+    }
+  }
+
+  function tryMatchAndPush(text, x, y, pageNum) {
+    if (!text || text.length < 3 || text.length > 200) return;
+    for (const p of patterns) {
+      const m = text.match(p.re);
       if (m) {
-        found.push({
-          pageNum: page.pageNum,
-          name: text,  // preserve original casing
-          x: line.x,
-          y: line.y,
-        });
+        const name = p.name(m);
+        // Deduplicate: same name at same page within 6px is the same label
+        const dup = found.find(f =>
+          f.pageNum === pageNum && f.name === name &&
+          Math.abs(f.x - x) < 6 && Math.abs(f.y - y) < 6
+        );
+        if (!dup) {
+          found.push({ pageNum, name, x, y, isBath: p.isBath !== false });
+        }
+        return; // stop after first pattern match (most specific wins)
       }
     }
   }
+
   return found;
 }
 
@@ -3362,12 +3399,32 @@ async function runTextLayerExtraction(files) {
       console.warn('[ScopeKit TL] failed to extract text from', file.name, e);
     }
   }
-  result.associations = associateLabelsToRooms(result.mirrors, result.rooms);
+  // Filter out non-bath labels (Water Closets etc.) from association pool
+  const bathRooms = result.rooms.filter(r => r.isBath !== false);
+  result.associations = associateLabelsToRooms(result.mirrors, bathRooms);
+
+  // Debug: log per-page findings so we can diagnose quickly
+  const perPage = {};
+  for (const r of result.rooms) {
+    perPage[r.pageNum] = perPage[r.pageNum] || { rooms: [], mirrors: [] };
+    perPage[r.pageNum].rooms.push(r.name + (r.isBath === false ? ' (non-bath)' : ''));
+  }
+  for (const m of result.mirrors) {
+    perPage[m.pageNum] = perPage[m.pageNum] || { rooms: [], mirrors: [] };
+    perPage[m.pageNum].mirrors.push(m.value);
+  }
+
   console.log('[ScopeKit TL] Text-layer findings:', {
     mirrorCount: result.mirrors.length,
     roomCount: result.rooms.length,
+    bathRoomCount: bathRooms.length,
     associationCount: result.associations.length,
+    perPage,
   });
+
+  // Expose on window for inspection
+  window.__scopekitTL = result;
+
   return result;
 }
 
@@ -4713,7 +4770,55 @@ async function overrideMirrorsFromTextLayer(result, textLayerData) {
   if (!textLayerData || !result || !Array.isArray(result.bathrooms)) return result;
   const baths = result.bathrooms;
   const assocs = textLayerData.associations || [];
+  const allMirrors = textLayerData.mirrors || [];
   const unmatched = []; // mirror labels we couldn't auto-assign
+
+  // ----- Zip-by-count fallback -----
+  // If we found mirror labels in the text layer but couldn't associate them
+  // to rooms (no room labels found OR all associations were low-confidence),
+  // try a simpler heuristic: if the total mirror count equals the sum of
+  // vanity counts across all baths, distribute by order on page.
+  const confidentAssocs = assocs.filter(a => a.confident);
+  if (confidentAssocs.length === 0 && allMirrors.length > 0 && baths.length > 0) {
+    const totalVanities = baths.reduce((sum, b) => sum + (b.vanity?.count || 0), 0);
+    const totalMirrors = allMirrors.length;
+    const bathsWithVanities = baths.filter(b => (b.vanity?.count || 0) > 0);
+    console.log('[ScopeKit TL] Zip-by-count check: ' + totalMirrors + ' mirrors vs ' + totalVanities + ' vanities across ' + bathsWithVanities.length + ' baths');
+
+    if (totalMirrors === totalVanities && bathsWithVanities.length > 0) {
+      // Order mirrors by page then by y (top to bottom)
+      const orderedMirrors = allMirrors.slice().sort((a, b) =>
+        (a.pageNum - b.pageNum) || (a.y - b.y) || (a.x - b.x));
+      let cursor = 0;
+      for (const bath of bathsWithVanities) {
+        const n = bath.vanity?.count || 0;
+        const assigned = orderedMirrors.slice(cursor, cursor + n);
+        cursor += n;
+        if (assigned.length) {
+          // If all assigned mirrors share the same value, show "Nx VALUE"
+          // Otherwise list each
+          const allSame = assigned.every(m => m.value === assigned[0].value);
+          const value = allSame
+            ? (n > 1 ? n + 'x ' + assigned[0].value : assigned[0].value)
+            : assigned.map(m => m.value).join(' + ');
+          bath.mirror = {
+            value,
+            conf: 'high',
+            mode: 'auto',
+            _provenance: {
+              source: 'text-layer',
+              page: assigned[0].pageNum,
+              file: assigned[0].sourceFile,
+              raw: assigned.map(m => m.raw).join(' | '),
+              note: 'matched by vanity count (' + totalMirrors + ' mirrors / ' + totalVanities + ' vanities)',
+            },
+          };
+        }
+      }
+      console.log('[ScopeKit TL] Zip-by-count succeeded — distributed ' + totalMirrors + ' mirrors across ' + bathsWithVanities.length + ' baths');
+      return result;
+    }
+  }
 
   // Group associations by room name (lower-cased for comparison)
   const byRoom = {};
