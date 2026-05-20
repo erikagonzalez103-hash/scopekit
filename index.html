@@ -3522,14 +3522,17 @@ Return JSON ONLY, no prose, no markdown, in this exact shape:
 }
 
 async function extractViaWorker() {
-  // Calls Anthropic via the worker's /api/messages proxy with the plan PDF(s) as
-  // document attachments. Anthropic supports native PDF input, so the model can
-  // read text + render pages internally without us doing client-side rasterization.
+  // TWO-PASS extraction:
+  //   Pass 1 (room ID)     — identify bathroom labels + sheet refs only
+  //   Pass 2 (per-bath)    — focused deep-dive on each bath using explicit visual heuristics
+  //                           for shower type, panel count, door vs fixed panel, etc.
+  //   Pass 3 (other items) — cabinet glass + non-bath items (uses unchanged hardware logic)
+  // Returns the same shape as before: { bathrooms[], otherItems[], scaleStatus }
   if (!state.planFiles.length) {
     throw new Error('No plan files uploaded.');
   }
 
-  // Read each file as base64 and turn into the right Anthropic content block.
+  // ── Build doc content blocks once — reused across passes ──
   const docContents = [];
   for (const file of state.planFiles) {
     const dataUrl = await new Promise((res, rej) => {
@@ -3555,45 +3558,356 @@ async function extractViaWorker() {
       console.warn('[ScopeKit] Skipping unsupported file type:', file.name, mime);
     }
   }
-
   if (docContents.length === 0) {
     throw new Error('No readable PDFs or images in the uploaded files.');
   }
 
-  // Build the prompt with builder + comm context
-  const prompt = PLAN_EXTRACTION_PROMPT
-    .replace('{{BUILDER}}', state.builder || 'unknown')
-    .replace('{{COMM}}', (state.comm || '').substring(0, 2000));
-  docContents.push({ type: 'text', text: prompt });
+  const builder = state.builder || 'unknown';
+  const comm    = (state.comm || '').substring(0, 2000);
 
-  const body = {
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 8000,
-    messages: [{ role: 'user', content: docContents }],
-  };
-
-  const res = await fetch(API_CONFIG.workerUrl + '/api/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error('Worker error ' + res.status + ': ' + errText.substring(0, 240));
+  // Helper: call worker with a prompt and return parsed JSON. Throws on hard failure.
+  async function callWorker(prompt, maxTokens) {
+    const content = docContents.concat([{ type: 'text', text: prompt }]);
+    const body = {
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens || 8000,
+      messages: [{ role: 'user', content }],
+    };
+    const res = await fetch(API_CONFIG.workerUrl + '/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error('Worker error ' + res.status + ': ' + errText.substring(0, 240));
+    }
+    const data = await res.json();
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+    return { parsed: parseExtractionJSON(text, data), raw: text };
   }
-  const data = await res.json();
-  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 
-  // Reuse the robust JSON parser from Flow B
-  const parsed = parseExtractionJSON(text, data);
+  // ────────── PASS 1: Identify bathrooms ──────────
+  console.log('[ScopeKit] Pass 1: identifying bathrooms…');
+  const p1Prompt = ROOM_ID_PROMPT
+    .replace('{{BUILDER}}', builder)
+    .replace('{{COMM}}', comm);
+  const p1 = await callWorker(p1Prompt, 4000);
+  const rooms = Array.isArray(p1.parsed.rooms) ? p1.parsed.rooms : [];
+  console.log('[ScopeKit] Pass 1 found rooms:', rooms.map(r => r.name));
 
-  // Normalize shape — fields the review screen depends on
+  if (rooms.length === 0) {
+    // No bathrooms found — fall back to the single-pass extractor so we still
+    // return something usable for otherItems / mirror-only edge cases.
+    console.warn('[ScopeKit] Pass 1 returned no rooms — falling back to single-pass extractor');
+    const fbPrompt = PLAN_EXTRACTION_PROMPT
+      .replace('{{BUILDER}}', builder)
+      .replace('{{COMM}}', comm);
+    const fb = await callWorker(fbPrompt, 8000);
+    return {
+      bathrooms: Array.isArray(fb.parsed.bathrooms) ? fb.parsed.bathrooms : [],
+      otherItems: Array.isArray(fb.parsed.otherItems) ? fb.parsed.otherItems : [],
+      scaleStatus: fb.parsed.scaleStatus || null,
+    };
+  }
+
+  // ────────── PASS 2: Per-bath deep dive ──────────
+  console.log('[ScopeKit] Pass 2: extracting per-bath detail…');
+  const roomList = rooms.map((r, i) =>
+    '  ' + (i+1) + '. "' + r.name + '"' +
+    (r.sheetReference ? ' (sheet ' + r.sheetReference + ')' : '') +
+    (r.approxLocation ? ' — ' + r.approxLocation : '')
+  ).join('\n');
+  const p2Prompt = BATH_DETAIL_PROMPT
+    .replace('{{BUILDER}}', builder)
+    .replace('{{COMM}}', comm)
+    .replace('{{ROOM_LIST}}', roomList);
+  const p2 = await callWorker(p2Prompt, 8000);
+  let bathrooms = Array.isArray(p2.parsed.bathrooms) ? p2.parsed.bathrooms : [];
+
+  // Carry forward sheetReference + approxLocation from Pass 1 into each bath
+  // (useful for the review UI to render a "From sheet X" badge).
+  bathrooms = bathrooms.map(b => {
+    const match = rooms.find(r =>
+      r.name && b.name && r.name.toLowerCase().trim() === b.name.toLowerCase().trim()
+    );
+    if (match) {
+      b.sheetReference = match.sheetReference || null;
+      b.approxLocation = match.approxLocation || null;
+      // Preserve Pass 1 flags (room-ID-level uncertainty) by merging
+      if (Array.isArray(match.flags) && match.flags.length) {
+        b.flags = (b.flags || []).concat(match.flags);
+      }
+    }
+    return b;
+  });
+
+  // ────────── PASS 3: Cabinet glass + other non-bath items ──────────
+  // Hardware logic was the part that worked — keep using the existing prompt,
+  // but instruct it to skip bathrooms (those are handled by Pass 2).
+  console.log('[ScopeKit] Pass 3: extracting cabinet glass + other items…');
+  let otherItems = [];
+  try {
+    const p3Prompt = OTHER_ITEMS_PROMPT
+      .replace('{{BUILDER}}', builder)
+      .replace('{{COMM}}', comm);
+    const p3 = await callWorker(p3Prompt, 4000);
+    otherItems = Array.isArray(p3.parsed.otherItems) ? p3.parsed.otherItems : [];
+  } catch (e) {
+    console.warn('[ScopeKit] Pass 3 (other items) failed — continuing without:', e.message);
+  }
+
   return {
-    bathrooms: Array.isArray(parsed.bathrooms) ? parsed.bathrooms : [],
-    otherItems: Array.isArray(parsed.otherItems) ? parsed.otherItems : [],
-    scaleStatus: parsed.scaleStatus || null,
+    bathrooms,
+    otherItems,
+    scaleStatus: p2.parsed.scaleStatus || p1.parsed.scaleStatus || null,
   };
 }
+
+// ── ROOM_ID_PROMPT — Pass 1 of two-pass extraction.
+// Sole job: identify which bathrooms exist and where they live in the plan set.
+// No specs, no dimensions, no hardware. Keep this prompt SMALL & FOCUSED.
+const ROOM_ID_PROMPT = `You are an Eridion Glass scope estimator looking at architectural plans. Your only job in THIS pass is to identify which BATHROOMS exist in the plan set.
+
+Builder on this set: {{BUILDER}}
+
+Communication / scope notes from Erika:
+{{COMM}}
+
+WHAT TO DO:
+1. Find the room schedule (usually on the floor-plan sheet, labeled "Room Schedule" or "Room Finishes"). Read EVERY room labeled as a bathroom there.
+2. Cross-reference with the floor-plan sheets — every door/space labeled "Bath", "Bathroom", "Primary Bath", "Master Bath", "Powder", "Half Bath", "Jack and Jill", "Ensuite", etc.
+3. Use the EXACT label the plan uses. Do NOT rename "Bath 2" to "Hall Bath" or vice versa. Capitalization should match (TITLE Case or ALL CAPS — whatever the plan uses).
+4. If the comm block above restricts scope (e.g. "only Primary Bath in scope"), STILL list every bathroom you find — but add a flag noting it's out of scope.
+
+WHAT NOT TO DO:
+- Do NOT include closets, mudrooms, hallways, bedrooms, kitchens, pantries, laundry. Those are handled separately.
+- Do NOT extract any shower/mirror/vanity specs in THIS pass. Just the names.
+- Do NOT invent rooms. If you can't read the label clearly, flag it as low confidence.
+- Do NOT collapse two distinct bathrooms into one (a common error is treating "Bath 2" and "Hall Bath" as the same room when they're actually different).
+
+Return JSON ONLY, no markdown, no preamble. Schema:
+
+{
+  "rooms": [
+    {
+      "name": "Primary Bath",
+      "sheetReference": "A2.0",
+      "approxLocation": "upper-right of main floor plan",
+      "confidence": "high",
+      "flags": []
+    },
+    {
+      "name": "Bath 2",
+      "sheetReference": "A2.0",
+      "approxLocation": "shared between Bed 2 and Bed 3 (Jack and Jill)",
+      "confidence": "high",
+      "flags": []
+    }
+  ]
+}
+
+Fields:
+- name: EXACT room label from the plan. If different sheets disagree, prefer the room schedule.
+- sheetReference: the sheet number where you can see this room best (A2.0, A2.1, etc.). Null if unknown.
+- approxLocation: a 1-line spatial hint that will help the next pass re-find this room (e.g. "upper-right corner of 2nd floor plan", "off the master bedroom"). Keep under 80 chars.
+- confidence: "high" if explicitly labeled in schedule + plan; "med" if labeled in only one place; "low" if you had to guess.
+- flags: only fill if there's something the user MUST know — e.g. "Two adjacent rooms both labeled Bath 2 — confirm which is which" or "Room labeled differently on schedule vs. plan".
+
+Be exhaustive — every bathroom in the plan set must appear. Don't shorten the list "to keep it clean."`;
+
+// ── BATH_DETAIL_PROMPT — Pass 2 of two-pass extraction.
+// Takes the room list from Pass 1 and does focused per-bath spec extraction
+// with EXPLICIT visual heuristics so the model doesn't confuse panels with doors.
+const BATH_DETAIL_PROMPT = `You are an Eridion Glass scope estimator. Pass 1 already identified which bathrooms exist. Your job NOW is to extract the glass scope for EACH ONE.
+
+Builder on this set: {{BUILDER}}
+
+Communication / scope notes from Erika:
+{{COMM}}
+
+BATHROOMS TO EXTRACT (from Pass 1 — these are authoritative; do not add or drop any):
+{{ROOM_LIST}}
+
+╔═════════════════════════════════════════════════════════════════════╗
+║ SCOPE OVERRIDES FROM COMM. The plans tell you WHAT EXISTS. The      ║
+║ comm tells you WHAT'S IN ERIDION'S SCOPE. When they conflict, comm  ║
+║ wins. Common overrides: "mirrors only", "no shower glass",          ║
+║ "drive-thru shower (no glass)", "tubs not in scope".                ║
+║ If comm excludes scope from a room, STILL emit the bathroom record  ║
+║ (mirrors may still be in scope) but use NEUTRAL values for the      ║
+║ excluded part (type/dims = "—", walls.layout = null, features=[]).  ║
+╚═════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════
+VISUAL HEURISTICS — READ THIS BEFORE LOOKING AT EACH BATH
+═══════════════════════════════════════════════════════════════════════
+These are the things the model historically gets wrong. Apply them carefully.
+
+A) DOOR vs FIXED PANEL — the #1 confusion
+- DOOR: drawn with a SWING ARC (a thin curved line showing the door's path of motion). On plan view, looks like a quarter-circle arc starting at the hinge point. The door leaf itself is a thin straight line at the open or closed position.
+- FIXED PANEL (also called "splash panel" or "stationary panel"): a straight glass line with NO swing arc. Often shown as a slightly thicker line, sometimes with a "GL" or "GLASS" label, sometimes with hatching.
+- KNEE WALL / PONY WALL: a SOLID wall element BELOW the glass — drawn as a filled rectangle (often hatched). The glass sits ON TOP of it. Glass mounted on a knee wall is still a panel (not a door).
+- If you see ONLY straight glass lines and no swing arc anywhere on the shower → the shower has NO door (curbless walk-in, doorless splash-panel design, or drive-thru).
+
+B) SHOWER TYPE — pick exactly ONE from this closed list
+- "inline-2"           — one fixed panel + one swinging door, in a straight line. Common.
+- "inline-2-no-door"   — two fixed panels meeting at a corner OR two panels in line, NO door. Doorless walk-in style.
+- "inline-3"           — fixed panel + door + fixed panel, all in line. Wider showers.
+- "alcove-3-wall"      — shower built into a 3-wall alcove with one glass face (door + optional panel).
+- "corner-2-wall"      — shower in a corner, two glass faces (often L-shape sliding or pivot).
+- "neo-angle"          — diamond/angled corner shower, 3 glass panels at 135° angles.
+- "curbless-walk-in"   — recessed floor, no curb, often with a single splash panel or no glass at all.
+- "tub-glass"          — bathtub with glass panel (frameless tub screen / tub-shower combo enclosure).
+- "drive-thru-no-glass" — open-to-room walk-in with NO glass enclosure. Common clues: wall-mount faucet on partition wall, no door/panel drawn, recessed floor leading to the shower area, partition walls only.
+- "tub-only"           — bathtub with tiled walls, NO shower / NO glass. (Walls.layout = null.)
+- If you genuinely cannot tell, use null + flag with kind="attn".
+
+C) PANEL COUNT — count GLASS pieces, not wall faces
+- A "panel" = one rectangular piece of glass that gets cut at the shop.
+- A swinging door = 1 panel.
+- A fixed splash panel = 1 panel.
+- A 90° return panel (short panel returning to the wall to catch splash) = 1 panel.
+- Knee walls themselves are NOT panels (they're framing). But glass mounted ON a knee wall IS a panel.
+- Cite your count in the walls.hint field, e.g. "1 door + 1 fixed panel = 2 panels".
+
+D) MIRRORS — check the INTERIOR ELEVATIONS / CABINET SECTION sheets
+- Floor plans rarely show mirror specs. Look for a sheet labeled "Interior Elevations" or "Cabinet Sections" or "Bath Elevations".
+- Mirrors are typically labeled with size + shape (e.g. "36×42 Round Scalloped", "Squoval", "Broken Arch").
+- DECORATIVE shapes (Round Scalloped, Squoval, Broken Arch, Pill, Arched-Top, etc.) → ALWAYS add an "attn" flag because they need vendor sourcing, not in-shop fab.
+- A bathroom can have 1 mirror per vanity (e.g. 2 vanities = 2 mirrors).
+
+E) CEILING HEIGHT — drives panel height for floor-to-ceiling glass
+- Check the floor plan for "Ceiling Height X'" labels per room, or a key in the title block.
+- Standard is 8'-0" or 9'-0"; Primary Baths often 10'-0".
+- This matters because frameless showers in 10' rooms need taller panels (premium pricing).
+
+F) FEATURES — only list things that ACTUALLY APPEAR in the plan, with evidence
+- "bench" — only if a built-in bench seat is drawn inside the shower.
+- "recessed shampoo niche" — only if a recessed rectangle is labeled "niche" inside a shower wall.
+- "knee wall" or "pony wall" — only if a solid wall element below glass is drawn. Note height if labeled (e.g. "36-inch knee wall").
+- "wall-mount faucet on knee wall" — strong signal for inline-2 doorless or knee-wall designs.
+- "linear drain" — drawn as a long narrow rectangle.
+- DO NOT list features that "might be there" — only list what's visible.
+
+═══════════════════════════════════════════════════════════════════════
+SCALE CHECK
+═══════════════════════════════════════════════════════════════════════
+Every sheet has a scale annotation in the title block (bottom-right). Floor plans typically 1/4" = 1', elevations typically 3/4" = 1' or 1/2" = 1'. Different sheets use different scales — always cite which sheet you used. When a dim is calculated rather than labeled, say so in the notes.
+
+═══════════════════════════════════════════════════════════════════════
+OUTPUT
+═══════════════════════════════════════════════════════════════════════
+Emit ONE bathroom record per room from the Pass 1 list above. Use the EXACT name from the list — do not rename.
+
+Return JSON ONLY, no markdown, no preamble. Schema:
+
+{
+  "bathrooms": [
+    {
+      "id": "bath-1",
+      "name": "Primary Bath",
+      "ceiling": { "value": "10'-0\"", "conf": "high", "mode": "auto" },
+      "shower": {
+        "type": { "value": "inline-2", "conf": "high", "mode": "auto" },
+        "dims": { "value": "72\" × 42\"", "conf": "med", "mode": "auto" },
+        "features": ["bench", "recessed shampoo niche", "36\" knee wall with wall-mount faucet"],
+        "walls": {
+          "layout": "inline-2",
+          "conf": "high",
+          "mode": "auto",
+          "panelCount": 2,
+          "doorCount": 1,
+          "fixedPanelCount": 1,
+          "ambiguous": false,
+          "hint": "1 swing door (arc visible on east side) + 1 fixed panel on knee wall = 2 panels"
+        }
+      },
+      "vanity": {
+        "count": 2,
+        "dims": { "value": "60\" each", "conf": "high", "mode": "auto" },
+        "wallWidth": { "value": "12'-0\"", "conf": "high", "mode": "auto" }
+      },
+      "mirror": { "value": "2× 36×42 Round Scalloped (decorative shape)", "conf": "high", "mode": "auto" },
+      "flags": [
+        { "kind": "attn", "text": "Decorative mirror shape — confirm vendor-sourced vs. in-shop fab" }
+      ]
+    }
+  ],
+  "scaleStatus": null
+}
+
+PER-BATH RULES:
+- name MUST match the Pass 1 list exactly (incl. capitalization).
+- shower.type.value MUST be one of the closed-list values from heuristic B above (or null + attn flag if truly indeterminate).
+- shower.walls.layout SHOULD match shower.type.value when applicable. If they differ, explain why in walls.hint.
+- shower.walls.panelCount = total glass pieces. doorCount + fixedPanelCount should equal panelCount.
+- shower.walls.hint MUST cite the visual evidence — e.g. "swing arc visible on east wall = door; west side is straight line with GL label = fixed panel".
+- If a bath has NO shower (tub-only or comm excludes), use neutral values: shower.type.value="—", dims="—", walls.layout=null, features=[].
+- For DECORATIVE mirror shapes → ALWAYS add a flag with kind="attn" calling out vendor sourcing.
+- For recessed/curbless showers → ALWAYS add a flag with kind="info" noting the curbless detail.
+- For knee walls → ALWAYS add a flag with kind="info" describing height + faucet position.
+- Per-field conf is high/med/low. High = explicitly labeled. Med = calculated from scale. Low = inferred / guess.
+- Set mode="auto" on every field (the review UI uses this to know it came from the model).
+
+Be CONSERVATIVE — if the plan doesn't show something clearly, set conf="low" and flag it rather than guessing.`;
+
+// ── OTHER_ITEMS_PROMPT — Pass 3 of two-pass extraction.
+// Focuses ONLY on cabinet glass and other non-bath glass scope.
+// The hardware logic worked well — preserve it verbatim from the original prompt.
+const OTHER_ITEMS_PROMPT = `You are an Eridion Glass scope estimator. Bathrooms have already been extracted in another pass. YOUR JOB now is to find NON-BATHROOM glass scope only: cabinet glass, pantry glass, custom art glass.
+
+Builder on this set: {{BUILDER}}
+
+Communication / scope notes from Erika:
+{{COMM}}
+
+If the comm block excludes cabinet glass or other non-bath items, return otherItems: [].
+
+═══════════════════════════════════════════════════════════════════════
+CABINET GLASS — special handling
+═══════════════════════════════════════════════════════════════════════
+- Identify cabinet-section / kitchen-elevation sheets that show doors labeled "Glass."
+- Count the glass doors visible on each elevation and identify the bay layout (e.g. "left bay near MW: 2 doors", "center bays: 4 doors", "right bay near fridge: 2 doors").
+
+DISTANCE TOOL ANNOTATIONS (the user's measurements added to the PDF):
+- PDF Distance Tool markings appear as colored arrows or triangles (typically grey or red) with a label like "0.62 in" or "0.99 in." These are PAPER MEASUREMENTS the user added — NOT architectural dimensions printed by the architect.
+- When you see one, multiply the value by the SHEET'S scale multiplier to get the real-world dimension:
+   - 1/8" = 1' scale → ×96 · 1/4" = 1' → ×48 · 3/8" = 1' → ×32
+   - 1/2" = 1' → ×24 · 3/4" = 1' → ×16 · 1" = 1' → ×12
+- Example: at 3/4" = 1' scale, a "0.62 in" Distance Tool annotation on a door's width = 0.62 × 16 = 9.92" ≈ 10" actual.
+
+INFERENCE — propagate measurements across visually-identical doors:
+- The user will NOT mark up every door. They mark a representative one (or two) per unique pattern. YOU propagate.
+- If a width measurement is given on one door and other doors in the SAME bay (pair, group) appear visually identical, apply that width to all of them.
+- If all glass doors in a row share the same visual HEIGHT, a single height measurement applies to every door in the row.
+- If multiple bays are visually identical (same width, same proportions), one bay's measurement applies to all the matching ones.
+- A bay that is visually DIFFERENT (clearly wider, narrower, taller, or differently proportioned) needs its own measurement — flag it if no measurement is provided.
+
+OUTPUT:
+- Emit ONE otherItems entry per VISUALLY DISTINCT bay/group. If 4 bays look identical, that's 1 entry with count = total doors across all 4. If bays differ, multiple entries.
+- In the notes field, say HOW you got the size: "measured directly via Distance Tool" vs. "inferred from bay X — visually identical" vs. "no measurement, dims unknown."
+- For any group with NO measurement and no visually-identical group with one, set size = "MEASURE ON PLAN", conf = "low", and add an "attn" flag asking the user to mark up that bay.
+- ONLY treat dims as confident (conf="high") if they came directly or by propagation from a Distance Tool annotation. Architectural-label dims (rare for cabinet glass) are also "high".
+- Do NOT estimate dims from visual proportion alone — that path is too unreliable to put in a quote.
+
+Return JSON ONLY, no markdown, no preamble. Schema:
+
+{
+  "otherItems": [
+    {
+      "type": "cabinet-glass",
+      "location": "kitchen",
+      "sublocation": "Kitchen 2 elevation · left bay",
+      "size": "~14\" × 30\"",
+      "count": 2,
+      "value": "Glass-front upper doors",
+      "notes": "Calculated from Kitchen 2 elevation, 3/4\" = 1' scale — verify with cabinet maker"
+    }
+  ]
+}
+
+If there is no non-bath glass scope in the plans, return: { "otherItems": [] }.`;
 
 // Plan-extraction prompt — used by extractViaWorker for builder PDFs
 const PLAN_EXTRACTION_PROMPT = `You are an Eridion Glass scope estimator. You're looking at architectural plans for a residential project. Identify every glass-relevant scope item and return structured data.
