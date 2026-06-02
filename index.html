@@ -2227,17 +2227,32 @@ const API_CONFIG = {
 // =============== PRE-SEEDED BUILDER PROFILES ===============
 // Glass height options — shower enclosure glass panel heights (NOT ceiling height)
 const GLASS_HEIGHTS = ["6'-6\"", "7'-0\"", "7'-6\"", "8'-0\"", 'Custom'];
+// Glass thickness options for showers. 3/8" and 1/4" cover essentially all jobs;
+// the list is intentionally open — add a size here (e.g. '1/2"') if ever needed.
+const GLASS_THICKNESSES = ['3/8"', '1/4"'];
 // Mirror height options
 const MIRROR_HEIGHTS = ['40"', '42"', 'Custom'];
 // Pony-wall / shower wall configuration options
 const SHOWER_LAYOUTS = [
-  { id: 'inline-2', label: '2-panel inline · door + fixed over pony wall' },
-  { id: 'enclosure-3', label: '3-sided enclosure · door on open side' },
-  { id: 'corner', label: 'Corner · 2 walls, door on one open side' },
-  { id: 'neo', label: 'Neo-angle' },
-  { id: 'inline', label: 'Inline panel only · no door' },
-  { id: 'bypass', label: 'Bypass slider' },
-  { id: 'dual', label: 'Dual: framed + frameless options' },
+  // --- Shower applications ---
+  { id: 'inline-2', label: '2-panel inline · swing door + fixed over pony wall', app: 'shower', door: 'swing' },
+  { id: 'enclosure-3', label: '3-sided enclosure · door on open side', app: 'shower', door: 'swing' },
+  { id: 'corner', label: 'Corner · 2 walls, door on one open side', app: 'shower', door: 'swing' },
+  { id: 'neo', label: 'Neo-angle', app: 'shower', door: 'swing' },
+  { id: 'box-3', label: '3-panel box · door + 2 fixed (corner)', app: 'shower', door: 'swing' },
+  { id: 'box-3-pony', label: '3-panel box w/ pony · door + 2 splash panels', app: 'shower', door: 'swing' },
+  { id: 'box-4-2pony', label: '4-panel box w/ 2 pony walls · door + 3 splash panels', app: 'shower', door: 'swing' },
+  { id: 'pivot', label: 'Pivot door only · no fixed panel', app: 'shower', door: 'pivot' },
+  { id: 'single-slider', label: 'Single slider · 1 sliding + 1 fixed', app: 'shower', door: 'slider' },
+  { id: 'bypass', label: 'Bypass sliders · 2 sliding doors', app: 'shower', door: 'bypass' },
+  { id: 'inline', label: 'Inline panel only · no door', app: 'shower', door: 'none' },
+  { id: 'inline-pony', label: 'Panel over pony wall · no door (to ceiling)', app: 'shower', door: 'none', ponyToCeiling: true },
+  { id: 'dual', label: 'Dual: framed + frameless options', app: 'shower', door: 'swing' },
+  // --- Tub applications (same door types, mounted on a tub deck) ---
+  { id: 'tub-pivot', label: 'Tub · pivot/hinged panel', app: 'tub', door: 'pivot' },
+  { id: 'tub-single-slider', label: 'Tub · single slider + fixed', app: 'tub', door: 'slider' },
+  { id: 'tub-bypass', label: 'Tub · bypass sliders', app: 'tub', door: 'bypass' },
+  { id: 'tub-fixed', label: 'Tub · fixed splash panel (no door)', app: 'tub', door: 'none' },
 ];
 
 // =============== RENDER PROFILES (prompt harness per builder) ===============
@@ -2561,7 +2576,127 @@ const BOM_TEMPLATES = {
     ],
     header: { sku: 'P770WS', stockLength: '98"', qty: 1 },
   },
-  // Other configs can plug in here as we encode them — enclosure-3, corner, neo, bypass
+
+  // Single static/fixed panel — no door, no header. Reverse-engineered from a real
+  // Smart Glazier "1 panel static" block (Jun 2 2026): 3/8" Clear Tempered ×1 (size
+  // from plan), SGCU1 wall clamps ×3 (job finish), Silicone ×2, Field Measure ×1,
+  // Factory Fabrication ×4, Install ×2. Glass size is NOT fixed — it comes from the
+  // plan/measured opening, so panels() reads it from the bath dimensions.
+  'inline': {
+    title: (bath) => `Supply and Install ${/master|primary/i.test(bath.name) ? 'Primary ' : ''}Shower Glass`,
+    fieldMeasure: 1,
+    factoryFab: 4,
+    install: 2,
+    hardware: [
+      { sku: 'SGCU1', qty: 3, role: 'wall clamps' },
+    ],
+    sundries: [
+      { label: 'Silicone', qty: 2 },
+    ],
+    // no header
+    panels: (bath, cfg) => {
+      const v = String(bath?.shower?.dims?.value || '');
+      const m = v.match(/(\d+(?:\.\d+)?)\s*["']?\s*[×x]\s*(\d+(?:\.\d+)?)/);
+      let w = m ? parseFloat(m[1]) : parseShowerWidth(bath);
+      let h = m ? parseFloat(m[2]) : null;
+      if (h == null) {
+        const ghs = cfg?.glassHeight === 'Custom' ? (cfg?.customGlassHeight || "7'-6\"") : (cfg?.glassHeight || "7'-6\"");
+        h = toInches(ghs) || null;
+      }
+      if (!w || !h) return null; // size depends on the plan — nothing to cut until we have it
+      const thickness = cfg?.glass || '3/8"';
+      const treatment = cfg?.treatment && cfg.treatment !== 'Clear' ? cfg.treatment : 'Clear';
+      return [{
+        label: `${thickness} ${treatment} Tempered`,
+        role: 'Fixed panel',
+        w, h,
+        edges: 'Flat Polish all 4',
+        cutouts: [],
+      }];
+    },
+  },
+  // ---- Glass-only configs (Smart Glazier templates supply hardware/labor/header;
+  // the tool only computes the glass panel sizes). glassOnly:true → buildJobTree
+  // emits just the glass pieces. Geometry confirmed with Erika Jun 2 2026:
+  //   sliders/bypass → two panels, 3" overlap, each = (opening + 3) / 2
+  //   pivot          → one door panel = opening (typical 24–30" W × 78–90" H)
+  //   tub variants   → same width rules, tub defaults 60" wide on an 18" deck
+  'single-slider': {
+    glassOnly: true, app: 'shower', door: 'slider',
+    title: (b) => `Supply and Install ${b.name} Shower Glass`,
+    panels: (bath, cfg) => overlapSplitPanels(bath, cfg, ['Fixed panel', 'Sliding door']),
+  },
+  'bypass': {
+    glassOnly: true, app: 'shower', door: 'bypass',
+    title: (b) => `Supply and Install ${b.name} Shower Glass`,
+    panels: (bath, cfg) => overlapSplitPanels(bath, cfg, ['Sliding door', 'Sliding door']),
+  },
+  'pivot': {
+    glassOnly: true, app: 'shower', door: 'pivot',
+    title: (b) => `Supply and Install ${b.name} Shower Glass`,
+    panels: (bath, cfg) => singlePanel(bath, cfg, 'Pivot door', null,
+      { minW: 24, maxW: 30, minH: 78, maxH: 90 }),
+  },
+  'tub-fixed': {
+    glassOnly: true, app: 'tub', door: 'none', tubDeck: 18,
+    title: (b) => `Supply and Install ${b.name} Tub Glass`,
+    panels: (bath, cfg) => singlePanel(bath, cfg, 'Fixed panel', { w: 60 }),
+  },
+  'tub-single-slider': {
+    glassOnly: true, app: 'tub', door: 'slider', tubDeck: 18,
+    title: (b) => `Supply and Install ${b.name} Tub Glass`,
+    panels: (bath, cfg) => overlapSplitPanels(bath, cfg, ['Fixed panel', 'Sliding door'], { w: 60 }),
+  },
+  'tub-bypass': {
+    glassOnly: true, app: 'tub', door: 'bypass', tubDeck: 18,
+    title: (b) => `Supply and Install ${b.name} Tub Glass`,
+    panels: (bath, cfg) => overlapSplitPanels(bath, cfg, ['Sliding door', 'Sliding door'], { w: 60 }),
+  },
+  'tub-pivot': {
+    glassOnly: true, app: 'tub', door: 'pivot', tubDeck: 18,
+    title: (b) => `Supply and Install ${b.name} Tub Glass`,
+    panels: (bath, cfg) => singlePanel(bath, cfg, 'Pivot door', { w: 60 }),
+  },
+  // Single fixed panel sitting on a pony/knee wall, no door. A tall fixed panel has
+  // nothing (door frame/header) to carry its weight, so it runs to the ceiling for
+  // support: glass height = ceiling − pony. Width comes from the plan. (Erika, Gordon
+  // Rd Primary Bath: 81.5" wide panel on a 42" pony, 10' ceiling → 81.5" × 78".)
+  'inline-pony': {
+    glassOnly: true, app: 'shower', door: 'none', ponyToCeiling: true,
+    title: (b) => `Supply and Install ${/master|primary/i.test(b.name) ? 'Primary ' : ''}Shower Glass`,
+    panels: (bath, cfg) => {
+      const v = String(bath && bath.shower && bath.shower.dims ? bath.shower.dims.value : '');
+      const wm = v.match(/(\d+(?:\.\d+)?)/);
+      const w = wm ? parseFloat(wm[1]) : parseShowerWidth(bath);
+      const ceilIn = toInches(bath && bath.ceiling ? bath.ceiling.value : null)
+        || toInches(cfg && cfg.glassHeight === 'Custom' ? cfg.customGlassHeight : (cfg ? cfg.glassHeight : null));
+      const ponyIn = (cfg && cfg.ponyHeight) ? (toInches(cfg.ponyHeight) || 42) : 42;
+      if (!w || !ceilIn) return [];
+      return [{
+        role: 'Fixed panel', label: glassLabel(cfg),
+        w, h: Math.max(1, ceilIn - ponyIn),
+        edges: 'Flat Polish all 4', cutouts: [],
+        note: 'Runs to ceiling — fixed panel needs top support',
+      }];
+    },
+  },
+  // Multi-panel box enclosures — widths from the plan (cfg.panelWidths), heights
+  // from the door/pony rule. Reverse-engineered from SG blocks (Jun 2 2026).
+  'box-3': {
+    glassOnly: true, app: 'shower', door: 'swing',
+    title: (b) => `Supply and Install ${b.name} Shower Glass`,
+    panels: (bath, cfg) => boxPanels(bath, cfg, { count: 3, ponyCount: 0 }),
+  },
+  'box-3-pony': {
+    glassOnly: true, app: 'shower', door: 'swing',
+    title: (b) => `Supply and Install ${b.name} Shower Glass`,
+    panels: (bath, cfg) => boxPanels(bath, cfg, { count: 3, ponyCount: 2 }),
+  },
+  'box-4-2pony': {
+    glassOnly: true, app: 'shower', door: 'swing',
+    title: (b) => `Supply and Install ${b.name} Shower Glass`,
+    panels: (bath, cfg) => boxPanels(bath, cfg, { count: 4, ponyCount: 3 }),
+  },
 };
 
 // Compute cut-list panel sizes for inline-2 frameless from current state.
@@ -2628,55 +2763,231 @@ function buildJobTree(bath, cfg) {
     };
   }
 
-  // For inline-2, use the size calculator
-  let sizes = null;
-  if (layout === 'inline-2') sizes = computeInline2Sizes(bath, cfg);
+  const finish = cfg?.finish || '';
 
-  return {
-    title: tmpl.title(bath),
-    parentQty: 1,
-    children: [
-      { kind: 'service', label: 'Field Measure & Consultation', qty: tmpl.fieldMeasure },
-      ...(sizes ? [
-        {
-          kind: 'glass',
-          label: sizes.fixed.label,
-          size: `${formatSgFraction(sizes.fixed.w)}" × ${formatSgFraction(sizes.fixed.h)}"`,
-          qty: 1,
-          role: sizes.fixed.role,
-          edges: sizes.fixed.edges,
-          cutouts: sizes.fixed.cutouts,
-        },
-        {
-          kind: 'glass',
-          label: sizes.door.label,
-          size: `${formatSgFraction(sizes.door.w)}" × ${formatSgFraction(sizes.door.h)}"`,
-          qty: 1,
-          role: sizes.door.role,
-          edges: sizes.door.edges,
-          cutouts: sizes.door.cutouts,
-        },
-      ] : [{ kind: 'placeholder', label: 'Glass panels — config not fully resolved' }]),
-      { kind: 'fab', label: 'Factory Fabrication', qty: tmpl.factoryFab },
-      ...tmpl.hardware.map(h => ({
-        kind: 'hardware',
-        sku: h.sku,
-        label: `${h.sku} ${h.label}`,
-        role: h.role,
-        qty: h.qty,
-        placement: h.placement,
-      })),
-      ...tmpl.sundries.map(s => ({ kind: 'sundry', label: s.label, qty: s.qty })),
-      {
-        kind: 'header',
-        label: `${tmpl.header.sku} ${tmpl.header.stockLength}`,
-        size: sizes ? sizes.headerCutTo : '—',
-        qty: tmpl.header.qty,
-        pending: sizes?.headerPending,
-      },
-      { kind: 'install', label: 'Install', qty: tmpl.install },
-    ],
-  };
+  // ---- Glass panels + optional header (config-specific) ----
+  let glassChildren = [];
+  let headerChild = null;
+  const glassFrom = (p) => ({
+    kind: 'glass',
+    label: p.label,
+    size: (p.w != null && p.h != null) ? `${formatSgFraction(p.w)}" × ${formatSgFraction(p.h)}"` : (p.size || '—'),
+    qty: p.qty || 1,
+    role: p.role,
+    edges: p.edges,
+    cutouts: p.cutouts || [],
+  });
+
+  if (layout === 'inline-2') {
+    // Validated inline-2 math (fixed panel over pony + swing door + header).
+    const sizes = computeInline2Sizes(bath, cfg);
+    if (sizes) {
+      glassChildren = [glassFrom({ ...sizes.fixed }), glassFrom({ ...sizes.door })];
+      if (tmpl.header) headerChild = {
+        kind: 'header', label: `${tmpl.header.sku} ${tmpl.header.stockLength}`,
+        size: sizes.headerCutTo, qty: tmpl.header.qty, pending: sizes.headerPending,
+      };
+    } else {
+      glassChildren = [{ kind: 'placeholder', label: 'Glass panels — config not fully resolved' }];
+    }
+  } else if (typeof tmpl.panels === 'function') {
+    // Generic, template-driven configs (e.g. single static panel). Sizes come
+    // from the plan via the template's panels() function.
+    const panels = tmpl.panels(bath, cfg);
+    glassChildren = (panels && panels.length)
+      ? panels.map(glassFrom)
+      : [{ kind: 'placeholder', label: 'Glass panel — enter the shower size on the review step' }];
+    if (tmpl.header) headerChild = {
+      kind: 'header', label: `${tmpl.header.sku} ${tmpl.header.stockLength || ''}`.trim(),
+      size: '—', qty: tmpl.header.qty, pending: true,
+    };
+  } else {
+    glassChildren = [{ kind: 'placeholder', label: 'Glass panels — config not fully resolved' }];
+  }
+
+  // Glass-only configs: Smart Glazier's own template supplies hardware, labor,
+  // header and sundries, so the tool emits just the glass panel sizes.
+  if (tmpl.glassOnly) {
+    return { title: tmpl.title(bath), parentQty: 1, glassOnly: true, children: glassChildren };
+  }
+
+  const children = [
+    { kind: 'service', label: 'Field Measure & Consultation', qty: tmpl.fieldMeasure },
+    ...glassChildren,
+    { kind: 'fab', label: 'Factory Fabrication', qty: tmpl.factoryFab },
+    // Hardware is finish-aware: the SKU + the job's selected finish (e.g. "SGCU1 Matte black").
+    ...tmpl.hardware.map(h => ({
+      kind: 'hardware',
+      sku: h.sku,
+      label: `${h.sku}${finish ? ' ' + finish : (h.label ? ' ' + h.label : '')}`,
+      role: h.role,
+      qty: h.qty,
+      placement: h.placement,
+    })),
+    ...tmpl.sundries.map(s => ({ kind: 'sundry', label: s.label, qty: s.qty })),
+    ...(headerChild ? [headerChild] : []),
+    { kind: 'install', label: 'Install', qty: tmpl.install },
+  ];
+
+  return { title: tmpl.title(bath), parentQty: 1, children };
+}
+
+// Single source of truth for the GLASS PANELS of a shower config. Returns just the
+// glass pieces — [{ role, label, w, h, edges, cutouts }] — with sizes derived from
+// the plan. This is all Smart Glazier needs (its templates prepopulate hardware,
+// labor, header and sundries), and it's the same geometry the 3D model will use.
+// Returns [] when the config isn't encoded yet or the size isn't known.
+function getShowerPanels(bath, cfg) {
+  const layout = bath?.shower?.walls?.layout;
+  const tmpl = BOM_TEMPLATES[layout];
+  if (layout === 'inline-2') {
+    const s = computeInline2Sizes(bath, cfg);
+    if (!s) return [];
+    return [
+      { role: s.fixed.role, label: s.fixed.label, w: s.fixed.w, h: s.fixed.h, edges: s.fixed.edges, cutouts: s.fixed.cutouts },
+      { role: s.door.role,  label: s.door.label,  w: s.door.w,  h: s.door.h,  edges: s.door.edges,  cutouts: s.door.cutouts },
+    ];
+  }
+  if (tmpl && typeof tmpl.panels === 'function') {
+    return tmpl.panels(bath, cfg) || [];
+  }
+  return [];
+}
+
+// Format a glass panel's cut size the way it should be typed into SG, e.g. 47-7/8" × 36".
+function formatPanelSize(p) {
+  if (!p || p.w == null || p.h == null) return p && p.size ? p.size : '—';
+  return `${formatSgFraction(p.w)}" × ${formatSgFraction(p.h)}"`;
+}
+
+// 2D front-elevation of a shower config, drawn to scale from getShowerPanels.
+// Panels are top-aligned (glass tops line up); a panel shorter than the tallest is
+// sitting on a pony/knee wall (drawn as a solid block beneath it). Slider/bypass
+// panels overlap 3"; on a tub the glass sits on a tub-deck block. Returns SVG.
+function buildShowerElevationSVG(bath, cfg) {
+  const fmtIn = (v) => formatSgFraction(v) + '"';
+  const panels = getShowerPanels(bath, cfg);
+  if (!panels.length) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 70"><text x="10" y="38" font-size="12" fill="#8a96a3">No glass sizes yet — set the config + dimensions.</text></svg>';
+  }
+  const layout = bath && bath.shower && bath.shower.walls ? bath.shower.walls.layout : null;
+  const tmpl = BOM_TEMPLATES[layout] || {};
+  const app = tmpl.app || 'shower';
+  const overlapIn = (tmpl.door === 'slider' || tmpl.door === 'bypass') ? 3 : 0;
+  const gapIn = overlapIn ? 0 : 2;
+  // Base block under the glass: a tub deck, or a pony/knee wall for "to ceiling" panels.
+  const ponyBaseIn = (tmpl.ponyToCeiling && cfg && cfg.ponyHeight) ? (toInches(cfg.ponyHeight) || 0) : 0;
+  const deckIn = app === 'tub' ? (tmpl.tubDeck || 18) : ponyBaseIn;
+  const baseLabel = app === 'tub' ? ('tub deck ' + deckIn + '"') : ('pony ' + deckIn + '"');
+
+  // x layout (inches)
+  const xs = []; let cursor = 0;
+  panels.forEach((p, i) => { if (i > 0) cursor += (overlapIn ? -overlapIn : gapIn); xs.push(cursor); cursor += p.w; });
+  const contentW = cursor;
+  const maxH = Math.max.apply(null, panels.map(p => p.h));
+  const totalH = maxH + deckIn;
+
+  const scale = Math.min(360 / contentW, 300 / totalH);
+  const padL = 50, padR = 18, padT = 18, padB = 36;
+  const W = Math.round(contentW * scale) + padL + padR;
+  const H = Math.round(totalH * scale) + padT + padB;
+  const floorY = H - padB;
+  const deckPx = deckIn * scale;
+  const topOfDeck = floorY - deckPx;
+  const glassTopY = topOfDeck - maxH * scale;
+
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="system-ui,-apple-system,sans-serif">`;
+  s += `<line x1="${padL - 10}" y1="${floorY}" x2="${W - padR}" y2="${floorY}" stroke="#9aa7b4" stroke-width="1.5"/>`;
+  if (deckIn) {
+    s += `<rect x="${padL}" y="${topOfDeck}" width="${contentW * scale}" height="${deckPx}" fill="#eef1f4" stroke="#9aa7b4"/>`;
+    s += `<text x="${padL + 5}" y="${topOfDeck + deckPx / 2 + 3}" font-size="9" fill="#5b6b7a">${escapeHtml(baseLabel)}</text>`;
+  }
+  panels.forEach((p, i) => {
+    const px = padL + xs[i] * scale, pw = p.w * scale, ph = p.h * scale;
+    const topY = glassTopY, botY = topY + ph;
+    if (botY < topOfDeck - 0.5) { // pony / knee wall beneath a short panel
+      s += `<rect x="${px}" y="${botY}" width="${pw}" height="${topOfDeck - botY}" fill="#dde3e9" stroke="#9aa7b4"/>`;
+    }
+    const isDoor = /door/i.test(p.role || '');
+    s += `<rect x="${px}" y="${topY}" width="${pw}" height="${ph}" fill="${isDoor ? 'rgba(79,160,210,0.32)' : 'rgba(130,185,215,0.20)'}" stroke="#3f7da8" stroke-width="1.5"/>`;
+    s += `<text x="${px + pw / 2}" y="${botY + 14}" font-size="10" text-anchor="middle" fill="#33414e">${escapeHtml(fmtIn(p.w))}</text>`;
+    s += `<text x="${px + pw / 2}" y="${topY + ph / 2}" font-size="9" text-anchor="middle" fill="#2c3a47">${escapeHtml((p.role || '').replace(/ panel/i, ''))}</text>`;
+  });
+  const midY = glassTopY + (maxH * scale) / 2;
+  s += `<text x="${padL - 12}" y="${midY}" font-size="10" text-anchor="middle" fill="#33414e" transform="rotate(-90 ${padL - 12} ${midY})">${escapeHtml(fmtIn(maxH))}</text>`;
+  s += '</svg>';
+  return s;
+}
+
+// Glass label, e.g. "3/8" Clear Tempered" / "1/4" Low-iron Tempered".
+function glassLabel(cfg) {
+  const t = (cfg && cfg.glass) || '3/8"';
+  const tr = (cfg && cfg.treatment && cfg.treatment !== 'Clear') ? cfg.treatment : 'Clear';
+  return `${t} ${tr} Tempered`;
+}
+
+// Pull opening width × height (inches) from the bath. Reads "W × H" from the bath
+// dims; falls back to parseShowerWidth and the configured glass height, then to any
+// supplied defaults (e.g. a 60" tub). Returns { W, H } with nulls when unknown.
+function parseOpeningWH(bath, cfg, defaults) {
+  defaults = defaults || {};
+  const v = String(bath && bath.shower && bath.shower.dims ? bath.shower.dims.value : '');
+  const m = v.match(/(\d+(?:\.\d+)?)\s*["']?\s*[×x]\s*(\d+(?:\.\d+)?)/);
+  let W = m ? parseFloat(m[1]) : (parseShowerWidth(bath) || defaults.w || null);
+  let H = m ? parseFloat(m[2]) : null;
+  if (H == null) {
+    const ghs = cfg && cfg.glassHeight === 'Custom' ? (cfg.customGlassHeight || '') : (cfg ? cfg.glassHeight || '' : '');
+    H = toInches(ghs) || defaults.h || null;
+  }
+  return { W, H };
+}
+
+// Two sliding/fixed panels sharing a 3" overlap: each panel = (opening + 3) / 2.
+function overlapSplitPanels(bath, cfg, roles, defaults) {
+  const { W, H } = parseOpeningWH(bath, cfg, defaults);
+  if (W == null || H == null) return [];
+  const OVERLAP = 3; // inches — confirmed shop standard for single sliders and bypass
+  const each = (W + OVERLAP) / 2;
+  const label = glassLabel(cfg);
+  return roles.map(role => ({ role, label, w: each, h: H, edges: 'Flat Polish all 4', cutouts: [] }));
+}
+
+// Single full-width panel (static splash, pivot door, tub fixed) = opening W × H.
+function singlePanel(bath, cfg, role, defaults, sanity) {
+  const { W, H } = parseOpeningWH(bath, cfg, defaults);
+  if (W == null || H == null) return [];
+  const label = glassLabel(cfg);
+  let note;
+  if (sanity && (W < sanity.minW || W > sanity.maxW || H < sanity.minH || H > sanity.maxH)) {
+    note = `Outside typical range (${sanity.minW}–${sanity.maxW}" W × ${sanity.minH}–${sanity.maxH}" H) — verify`;
+  }
+  return [{ role, label, w: W, h: H, edges: 'Flat Polish all 4', cutouts: [], note }];
+}
+
+// Multi-panel "box" enclosures (3-panel, 3-panel + pony, 4-panel + 2 pony). Each
+// panel's WIDTH comes from the plan (entered or measured into cfg.panelWidths[]).
+// Heights follow the shop rule: the door panel is full glass height; panels over a
+// pony/knee wall are short (glass height − pony height). spec = { count, ponyCount }.
+function boxPanels(bath, cfg, spec) {
+  const widths = (cfg && cfg.panelWidths) || [];
+  const ghs = cfg && cfg.glassHeight === 'Custom' ? (cfg.customGlassHeight || '') : (cfg ? cfg.glassHeight || "7'-0\"" : "7'-0\"");
+  const glassH = toInches(ghs) || 90;
+  const ponyH = cfg && cfg.ponyHeight ? (toInches(cfg.ponyHeight) || 0) : 0;
+  const shortH = (spec.ponyCount && ponyH) ? Math.max(1, glassH - ponyH) : glassH;
+  const label = glassLabel(cfg);
+  const out = [];
+  for (let i = 0; i < spec.count; i++) {
+    const w = parseFloat(widths[i]);
+    if (!w) return []; // need every panel width before we can cut
+    const isPony = spec.ponyCount > 0 && i < spec.ponyCount;
+    const isDoor = i === spec.count - 1; // last panel is the swing door
+    out.push({
+      role: isDoor ? 'Door panel' : 'Fixed panel',
+      label, w, h: isPony ? shortH : glassH,
+      edges: 'Flat Polish all 4', cutouts: [],
+    });
+  }
+  return out;
 }
 
 // Format a decimal inch value as "23-1/2" or "47-7/8" — matches SG's display style (with dashes)
@@ -3152,14 +3463,70 @@ function buildRenderPayload(bath, cfg) {
     builderName: builder?.name || 'Unknown',
     constraintSvg,        // input 1: geometry
     references: profile.references,  // input 2: style anchors
-    prompt: buildEffectivePrompt(profile, cfg),  // input 3: text
+    prompt: buildEffectivePrompt(profile, cfg, bath),  // input 3: text (in-situ scene)
     composition: profile.composition,
     cropStyle: profile.cropStyle,
   };
 }
 
-// Build the effective prompt by combining profile prompt with config-specific details
-function buildEffectivePrompt(profile, cfg) {
+// Describe the actual scene for an IN-SITU render: the shower config + size, the
+// mirror (framed/unframed + size), and the adjacent fixtures (vanity, tub) — so the
+// photoreal image shows the glass installed in the room, true to the plan.
+function buildSceneContext(bath, cfg) {
+  if (!bath) return [];
+  const parts = [];
+  const layout = bath.shower && bath.shower.walls ? bath.shower.walls.layout : null;
+  const tmpl = (typeof BOM_TEMPLATES !== 'undefined' && BOM_TEMPLATES[layout]) || {};
+  const app = tmpl.app || 'shower';
+  const showerDesc = {
+    'inline-2': 'a walk-in shower with a fixed glass panel over a pony wall and a swing glass door',
+    'inline': 'a walk-in shower with a single fixed glass panel',
+    'single-slider': 'a shower with one sliding glass door beside a fixed glass panel',
+    'bypass': 'a shower with bypass sliding glass doors',
+    'pivot': 'a walk-in shower with a single pivoting glass door',
+    'enclosure-3': 'a three-sided glass shower enclosure',
+    'corner': 'a corner glass shower enclosure',
+    'neo': 'a neo-angle glass shower enclosure',
+    'box-3': 'a three-panel glass shower enclosure',
+    'box-3-pony': 'a three-panel glass shower enclosure on a pony wall',
+    'box-4-2pony': 'a four-panel glass shower enclosure on pony walls',
+  }[layout];
+  if (app === 'tub') parts.push('a tub with a glass tub enclosure');
+  else if (showerDesc) parts.push(showerDesc);
+  else if (bath.shower && bath.shower.type && bath.shower.type.value && !/none|tbd|—/i.test(bath.shower.type.value)) parts.push('a glass ' + String(bath.shower.type.value).toLowerCase());
+
+  const panels = (typeof getShowerPanels === 'function') ? getShowerPanels(bath, cfg) : [];
+  if (panels.length) {
+    const maxH = Math.max.apply(null, panels.map(p => p.h || 0));
+    if (maxH) parts.push('glass about ' + Math.round(maxH) + ' inches tall');
+  }
+  (bath.shower && bath.shower.features || []).forEach(f => {
+    if (/pony|knee/i.test(f)) parts.push(String(f).toLowerCase());
+    if (/niche/i.test(f)) parts.push('a tiled niche');
+    if (/bench/i.test(f)) parts.push('a tiled bench');
+  });
+
+  const vc = (bath.vanity && bath.vanity.count) || 0;
+  if (vc > 0) {
+    const mc = (state.mirrorConfigs || {})[bath.id] || {};
+    const framed = mc.framed ? 'framed' : 'frameless';
+    let msize = '', mcount = vc;
+    try {
+      const wallW = toInches(bath.vanity && bath.vanity.wallWidth ? bath.vanity.wallWidth.value : null);
+      const calc = calcMirrorOptions(wallW, vc, 40);
+      const sel = (calc.options || []).find(o => o.id === mc.selectedOption) || (calc.options || [])[0];
+      if (sel) { mcount = sel.count || vc; msize = Math.round(sel.eachWidth) + ' by ' + Math.round(sel.eachHeight) + ' inch '; }
+    } catch (e) {}
+    const vanityPhrase = vc > 1 ? 'a double vanity' : 'a single vanity';
+    const mirrorPhrase = (mcount > 1 ? mcount + ' ' : 'a ') + framed + ' ' + msize + 'mirror' + (mcount > 1 ? 's' : '');
+    parts.push(vanityPhrase + ' with ' + mirrorPhrase + ' mounted above it');
+  }
+  return parts;
+}
+
+// Build the effective prompt by combining profile prompt with the in-situ scene
+// context and config-specific glass/finish details.
+function buildEffectivePrompt(profile, cfg, bath) {
   const finishMap = {
     'Brushed nickel': 'brushed nickel hardware, slightly warm silver tone',
     'Chrome': 'polished chrome hardware, bright silver finish',
@@ -3179,10 +3546,13 @@ function buildEffectivePrompt(profile, cfg) {
   };
 
   const parts = [
+    'photorealistic interior photograph of a bathroom',
     profile.prompt,
+    ...buildSceneContext(bath, cfg),
     frameMap[cfg.frame] || cfg.frame,
     `${cfg.glass || '3/8"'} ${treatmentMap[cfg.treatment] || cfg.treatment || 'clear glass'}`,
     finishMap[cfg.finish] || cfg.finish,
+    'in-situ view showing the glass installed in the room with the adjacent fixtures, accurate proportions, realistic daylight, architectural interior photography',
   ].filter(Boolean);
 
   return parts.join(', ');
@@ -3237,34 +3607,57 @@ function findMirrorLabels(textLayers) {
   const found = [];
   // Match patterns: "Mirror Size: 36" x 42"", "Mirror Size 36 x 42", "Mirror: 36×42", etc.
   // Also handles unicode multiplication sign × and straight x.
-  const mirrorRegex = /mirror\s*(?:size)?\s*[:.]?\s*(\d{2,3})\s*["\u2033]?\s*[x\u00d7\u2715]\s*(\d{2,3})\s*["\u2033]?/i;
+  // Allow a short run of words ("Size", "Shown", ":") between "mirror" and the
+  // dimensions so builder phrasings like "Mirror Size Shown: 36\"x52\"" match.
+  // The bridge is capped at 24 chars and forbids digits to lock onto the W x H pair.
+  const sizeRe = /\b(\d{2,3})\s*["\u2033]?\s*[x\u00d7\u2715]\s*(\d{2,3})\b/;
+  const SHAPE = /(round\s*scalloped|scalloped|squoval|race\s*track|rectangle|rectangular|oval|arch(?:ed|top)?|round|circle|pill|capsule)/i;
+  const titleShape = (s) => s ? s.replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim() : null;
 
   for (const page of textLayers) {
-    // Combine adjacent text items into "lines" since pdf.js splits aggressively
-    // We do this by clustering items with similar y-coordinates (within 4px).
-    const lines = clusterItemsIntoLines(page.items);
-    for (const line of lines) {
-      const text = line.items.map(i => i.str).join(' ');
-      const m = text.match(mirrorRegex);
-      if (m) {
-        const w = parseInt(m[1], 10);
-        const h = parseInt(m[2], 10);
-        // Sanity: mirrors are typically 18-96 inches in each dim
-        if (w >= 18 && w <= 96 && h >= 18 && h <= 96) {
-          found.push({
-            pageNum: page.pageNum,
-            raw: text.trim(),
-            widthIn: w,
-            heightIn: h,
-            value: w + '" x ' + h + '"',
-            x: line.x,
-            y: line.y,
-          });
+    const pageW = page.viewport?.width || 0;
+    const pageH = page.viewport?.height || 0;
+    const runs = assembleTextRuns(page.items);
+    for (const run of runs) {
+      const m = run.str.match(sizeRe);
+      if (!m) continue;
+      const w = parseInt(m[1], 10), h = parseInt(m[2], 10);
+      if (!(w >= 12 && w <= 120 && h >= 12 && h <= 120)) continue; // plausible mirror size
+
+      // Require a MIRROR cue: this run says "mirror", or a nearby run does. Builders
+      // stack the callout across lines: "Mirror Size Shown:" / "36\"x52\"" / "Rectangle Mirror".
+      let cue = /mirror/i.test(run.str);
+      let shape = null;
+      const sm0 = run.str.match(SHAPE); if (sm0) shape = sm0[1];
+      for (const o of runs) {
+        if (o === run) continue;
+        const fs = Math.max(run.fontSize || 10, o.fontSize || 10);
+        if (Math.abs(o.y - run.y) <= fs * 2.4 && Math.abs(o.x - run.x) <= fs * 9) {
+          if (/mirror/i.test(o.str)) cue = true;
+          if (!shape) { const sm = o.str.match(SHAPE); if (sm) shape = sm[1]; }
         }
       }
+      if (!cue) continue; // a stray dimension that isn't a mirror
+
+      found.push({
+        pageNum: page.pageNum,
+        raw: run.str.trim(),
+        widthIn: w, heightIn: h,
+        value: w + '" x ' + h + '"',
+        shape: titleShape(shape),
+        x: run.x, y: run.y, pageW, pageH,
+      });
     }
   }
-  return found;
+  // De-dupe identical size+shape at near-identical positions (a bare size run and a
+  // combined "Mirror Size Shown: WxH" run can both match within one callout).
+  const out = [];
+  for (const f of found) {
+    const dup = out.find(g => g.pageNum === f.pageNum && g.value === f.value &&
+      (g.shape || '') === (f.shape || '') && Math.abs(g.x - f.x) < 30 && Math.abs(g.y - f.y) < 30);
+    if (!dup) out.push(f);
+  }
+  return out;
 }
 
 // Find room labels — looks for bath-related room names anywhere in lines/items.
@@ -3281,47 +3674,156 @@ function findRoomLabelsTL(textLayers) {
   // "Primary Water Closet" is intentionally listed so we can EXCLUDE it later
   // (it's not a bath, but we don't want it absorbed into "Primary Bath").
   const patterns = [
-    { re: /\bprimary\s+water\s+closet\b/i,                     name: (m) => 'Primary Water Closet', isBath: false },
-    { re: /\bmaster\s+water\s+closet\b/i,                      name: (m) => 'Master Water Closet',  isBath: false },
-    { re: /\bprimary\s+bath(?:room)?\b/i,                       name: (m) => 'Primary Bath' },
-    { re: /\bmaster\s+bath(?:room)?\b/i,                        name: (m) => 'Master Bath' },
-    { re: /\bjack\s*(?:and|&|n)?\s*jill(?:\s+bath)?\b/i,      name: (m) => 'Jack and Jill' },
-    { re: /\bpowder\s+(?:bath|room)\b/i,                        name: (m) => 'Powder Room' },
-    { re: /\bhalf\s+bath\b/i,                                   name: (m) => 'Half Bath' },
-    { re: /\bhall\s+bath\b/i,                                   name: (m) => 'Hall Bath' },
-    { re: /\bguest\s+bath(?:room)?\b/i,                         name: (m) => 'Guest Bath' },
-    { re: /\bkids?\s+bath(?:room)?\b/i,                         name: (m) => 'Kids Bath' },
-    { re: /\bensuite\b/i,                                        name: (m) => 'Ensuite' },
-    { re: /\bbath(?:room)?\s+(\d+)\b/i,                        name: (m) => 'Bath ' + m[1] },
-    { re: /\bwc\s*(\d*)\b/i,                                   name: (m) => 'WC' + (m[1] ? ' ' + m[1] : '') },
+    // ---- Non-bath rooms (tagged isBath:false so they're excluded from mirror
+    // association — water closets / toilet rooms hold a toilet, not vanity glazing).
+    { re: /\b(?:primary|master|owner'?s?)\s+water\s+closet\b/i, name: () => 'Water Closet', isBath: false },
+    { re: /\bwater\s+closet\b/i,                                name: () => 'Water Closet', isBath: false },
+    { re: /\btoilet\s+(?:room|rm)\b/i,                          name: () => 'Toilet Room', isBath: false },
+
+    // ---- Primary / Master / Owner's suites ----
+    { re: /\bprimary\s+bath(?:room)?\b/i,                       name: () => 'Primary Bath' },
+    { re: /\bmaster\s+bath(?:room)?\b/i,                        name: () => 'Master Bath' },
+    { re: /\bmstr\.?\s+bath(?:room)?\b/i,                       name: () => 'Master Bath' },
+    { re: /\bowner'?s?\s+(?:suite\s+)?bath(?:room)?\b/i,        name: () => "Owner's Bath" },
+
+    // ---- Shared / themed baths ----
+    { re: /\bjack\s*(?:and|&|n|'n')?\s*jill(?:\s+bath(?:room)?)?\b/i, name: () => 'Jack and Jill' },
+    { re: /\bj\s*&\s*j(?:\s+bath(?:room)?)?\b/i,               name: () => 'Jack and Jill' },
+    { re: /\bpowder\s+(?:bath|room|rm)\b/i,                     name: () => 'Powder Room' },
+    { re: /\bpwdr\.?\b/i,                                        name: () => 'Powder Room' },
+    { re: /\bpowder\b(?!\s*coat)/i,                              name: () => 'Powder Room' },
+    { re: /\bhalf\s+bath(?:room)?\b/i,                          name: () => 'Half Bath' },
+    { re: /(?:\b1\s*[\/⁄]\s*2|[½])\s*bath(?:room)?\b/i, name: () => 'Half Bath' },
+    { re: /\bfull\s+bath(?:room)?\b/i,                          name: () => 'Full Bath' },
+    { re: /\b(?:3\/4|three[\s-]quarter)\s+bath(?:room)?\b/i,    name: () => '3/4 Bath' },
+    { re: /\bhall\s+bath(?:room)?\b/i,                          name: () => 'Hall Bath' },
+    { re: /\bguest\s+bath(?:room)?\b/i,                         name: () => 'Guest Bath' },
+    { re: /\b(?:kid'?s?|kids|children'?s?|child'?s?)\s+bath(?:room)?\b/i, name: () => 'Kids Bath' },
+    { re: /\bboys?'?\s+bath(?:room)?\b/i,                       name: () => "Boys' Bath" },
+    { re: /\bgirls?'?\s+bath(?:room)?\b/i,                      name: () => "Girls' Bath" },
+    { re: /\b(?:pool|cabana)\s+bath(?:room)?\b/i,              name: () => 'Pool Bath' },
+    { re: /\b(?:bsmt|basement)\s+bath(?:room)?\b/i,            name: () => 'Basement Bath' },
+    { re: /\b(?:jr\.?|junior)\s+(?:suite\s+)?bath(?:room)?\b/i, name: () => 'Junior Suite Bath' },
+    { re: /\b(?:nanny|in[\s-]?law)\s+bath(?:room)?\b/i,        name: () => 'In-Law Bath' },
+    { re: /\ben[\s-]?suite\b/i,                                  name: () => 'Ensuite' },
+
+    // ---- Numbered / lettered ----
+    { re: /\bbath(?:room)?\s*(?:#|no\.?|num\.?)\s*(\d{1,2})\b/i, name: (m) => 'Bath ' + m[1] },
+    // Bath numbers are a single digit (1–9). Requiring an isolated digit avoids
+    // gluing a stray dimension digit onto the label (e.g. "BATH 42" from noise).
+    { re: /\bbath(?:room)?\s+(?<!\d)(\d)(?!\d)/i,               name: (m) => 'Bath ' + m[1] },
+    { re: /\bbath(?:room)?\s+([a-d])\b/i,                       name: (m) => 'Bath ' + m[1].toUpperCase() },
+    { re: /\bwc\s*#?\s*(\d+)\b/i,                               name: (m) => 'WC ' + m[1], isBath: false },
+    { re: /\bw\.c\.?\b/i,                                        name: () => 'WC', isBath: false },
+    { re: /\bwc\b/i,                                             name: () => 'WC', isBath: false },
+
+    // ---- Generic (least specific — must stay last) ----
+    { re: /\bbath(?:room)?\b/i,                                 name: () => 'Bath' },
   ];
 
   for (const page of textLayers) {
-    // Try matching on individual text items first (often labels are atomic in pdf.js)
-    for (const it of page.items) {
-      tryMatchAndPush(it.str, it.x, it.y, page.pageNum);
-    }
-    // Then on clustered lines (catches multi-item labels like "Primary" + " " + "Bath")
-    const lines = clusterItemsIntoLines(page.items);
-    for (const line of lines) {
-      const text = line.items.map(i => i.str).join(' ').trim();
-      tryMatchAndPush(text, line.x, line.y, page.pageNum);
+    const pageW = page.viewport?.width || 0;
+    const pageH = page.viewport?.height || 0;
+    // Match against reconstructed text runs. assembleTextRuns handles both
+    // whole-word items and per-glyph letter-spaced PDFs, and keeps neighbouring
+    // labels on a shared y-band separate ("BATH 3" vs "BEDROOM 5"). Working from
+    // runs (rather than also matching raw items) means the stacking-merge and
+    // schedule-row logic below see every candidate exactly once — no duplicates.
+    //
+    // Floor-plan labels are also frequently STACKED on two lines — a qualifier
+    // ("PRIMARY", "HALF", "GUEST"…) sitting directly above "BATH" — so the two
+    // arrive as separate runs. We rejoin a qualifier run with the "BATH" run
+    // directly beneath it (aligned x, small dy) to recover "Primary Bath" /
+    // "Half Bath". Crucially this is qualifier-aware: "BEDROOM" above "BATH" is
+    // NOT merged (an ensuite next to a bedroom is just a bath).
+    const runs = assembleTextRuns(page.items);
+    for (const run of runs) {
+      const s = (run.str || '').trim();
+      const isBathHead = /^bath(?:room)?\b/i.test(s);
+      // Skip sub-elements inside a bath (linen/closet/bench/cabinet labels) so
+      // they don't double-count as another bathroom.
+      if (isBathHead && /\b(?:linen|closet|bench|cab(?:inet)?|vanity|niche)\b/i.test(s)) continue;
+      if (isBathHead) {
+        const qual = findQualifierAbove(run, runs);
+        if (qual) {
+          // Strip stray standalone digits glued on by noisy letter-spaced layouts
+          // (e.g. "HALF 0" over "BATH 42" → "HALF BATH"), but keep fractions like 1/2.
+          const composite = (qual.str + ' ' + s)
+            .replace(/(?<![\d/])\d{1,3}(?![\d/])/g, ' ')
+            .replace(/\s+/g, ' ').trim();
+          tryMatchAndPush(composite, run.x, run.y, page.pageNum, pageW, pageH);
+          continue;
+        }
+        // A generic, unqualified, un-numbered "BATH" that sits in a "ROOM TYPE |
+        // QTY" schedule table (a lone quantity integer in a column to its right)
+        // is a tally row, not a room on the plan — skip it so it isn't counted
+        // as a phantom bathroom.
+        if (!/\d/.test(s) && looksLikeScheduleRow(run, runs)) continue;
+      }
+      tryMatchAndPush(s, run.x, run.y, page.pageNum, pageW, pageH);
     }
   }
 
-  function tryMatchAndPush(text, x, y, pageNum) {
-    if (!text || text.length < 3 || text.length > 200) return;
+  // A recognized bath qualifier sitting directly above a "BATH" run (aligned in
+  // x, within ~1.8 line-heights vertically) — returned so we can compose the
+  // full room name. Nearest qualifier wins.
+  function findQualifierAbove(bathRun, runs) {
+    const QUAL = /^(?:primary|master|owner'?s?|guest|hall|half|1\s*[\/⁄]\s*2|½|kid'?s?|kids|children'?s?|child'?s?|boys?'?|girls?'?|jack\s*(?:and|&|n|'n')?\s*jill|j\s*&\s*j|powder|pwdr|pool|cabana|junior|jr\.?|basement|bsmt|nanny|in[-\s]?law|full|3\/4|three[-\s]quarter|en[-\s]?suite)\b/i;
+    let best = null;
+    for (const q of runs) {
+      if (q === bathRun) continue;
+      // Tolerate a stray leading integer glued on by letter-spaced layouts, e.g.
+      // "0 PRIMARY" → "PRIMARY", before testing whether it's a qualifier. Keep
+      // fractions like "1/2" (digit followed by a slash) intact.
+      const qclean = (q.str || '').replace(/^\s*\d{1,3}(?![\/⁄\d])\s*/, '').trim();
+      if (!QUAL.test(qclean)) continue;
+      const fs = Math.max(bathRun.fontSize || 10, q.fontSize || 10);
+      const dy = bathRun.y - q.y;                 // q must sit ABOVE the bath run
+      const dx = Math.abs(bathRun.x - q.x);       // and be left-aligned with it
+      if (dy > 0 && dy <= fs * 1.8 && dx <= fs * 3) {
+        if (!best || dy < best.dy) best = { str: qclean, dy };
+      }
+    }
+    return best;
+  }
+
+  // Heuristic: does this run look like a row in a "ROOM TYPE | QTY" schedule
+  // table? True when a standalone 1-2 digit integer sits in a column to the
+  // right on the same line (the quantity cell). Distinguishes tally rows from
+  // real plan labels, which carry their number inline ("BATH 2") not in a
+  // separate aligned column.
+  function looksLikeScheduleRow(run, runs) {
+    const fs = run.fontSize || 12;
+    for (const o of runs) {
+      if (o === run) continue;
+      if (!/^\d{1,2}$/.test((o.str || '').trim())) continue; // a lone quantity integer
+      const dx = o.x - run.x;
+      const dy = Math.abs(o.y - run.y);
+      if (dx > fs * 2 && dx < fs * 14 && dy <= fs * 0.7) return true;
+    }
+    return false;
+  }
+
+  function tryMatchAndPush(text, x, y, pageNum, pageW, pageH) {
+    if (!text || text.length < 2 || text.length > 200) return;
+    // Schedule/legend/keynote/general-notes HEADINGS aren't rooms — e.g.
+    // "BED & BATHROOM SCHEDULE" must not register as a generic "Bath".
+    if (/\b(?:schedule|legend|keynotes?|general\s+notes?|index)\b/i.test(text)) return;
     for (const p of patterns) {
       const m = text.match(p.re);
       if (m) {
         const name = p.name(m);
-        // Deduplicate: same name at same page within 6px is the same label
+        // Deduplicate: same name on the same page within 25px is the same label
+        // (the item-level and line-level passes, plus split text runs, often emit
+        // the same label two or three times a few px apart). A generous radius
+        // collapses these so duplicate same-room labels don't later sink the
+        // association confidence ratio.
         const dup = found.find(f =>
           f.pageNum === pageNum && f.name === name &&
-          Math.abs(f.x - x) < 6 && Math.abs(f.y - y) < 6
+          Math.abs(f.x - x) < 25 && Math.abs(f.y - y) < 25
         );
         if (!dup) {
-          found.push({ pageNum, name, x, y, isBath: p.isBath !== false });
+          found.push({ pageNum, name, x, y, pageW, pageH, isBath: p.isBath !== false });
         }
         return; // stop after first pattern match (most specific wins)
       }
@@ -3352,28 +3854,321 @@ function clusterItemsIntoLines(items) {
   return lines;
 }
 
+// Collapse room labels found across every sheet/file into one canonical list of
+// distinct bathrooms. A single bath is labelled on many sheets (floor plan,
+// electrical, cabinet schedule) and sometimes twice on one sheet (two cabinet
+// views) — so the raw label list double-counts heavily. We key by normalized
+// name, keep provenance (which sheets each appeared on), and order the result
+// naturally: primary/master first, numbered baths ascending, then the rest.
+// Returns: [{ name, key, instances:[{sheet,page,x,y}], count, sheets:[page…] }]
+function dedupeRoomsAcrossSheets(rooms) {
+  const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const baths = (rooms || []).filter(r => r && r.isBath !== false);
+  const byKey = new Map();
+  for (const r of baths) {
+    const key = norm(r.name);
+    if (!key) continue;
+    let entry = byKey.get(key);
+    if (!entry) { entry = { name: r.name, key, instances: [] }; byKey.set(key, entry); }
+    entry.instances.push({ sheet: r.sourceFile || null, page: r.pageNum, x: r.x, y: r.y });
+  }
+  const rank = (name) => {
+    const n = (name || '').toLowerCase();
+    if (/\b(?:primary|master|owner)/.test(n)) return [0, 0, n];
+    const m = n.match(/\bbath(?:room)?\s*(\d+)/);
+    if (m) return [1, parseInt(m[1], 10), n];
+    return [2, 0, n]; // half, powder, guest, named baths
+  };
+  const list = Array.from(byKey.values());
+  list.sort((a, b) => {
+    const ra = rank(a.name), rb = rank(b.name);
+    return (ra[0] - rb[0]) || (ra[1] - rb[1]) || ra[2].localeCompare(rb[2]);
+  });
+  list.forEach(e => {
+    e.count = e.instances.length;
+    e.sheets = Array.from(new Set(e.instances.map(i => i.page))).sort((x, y) => x - y);
+  });
+  return list;
+}
+
+// Build minimal bathroom skeleton objects (the shape the review screen expects)
+// from the canonical text-layer bath list. Fields are low-confidence placeholders
+// to be confirmed; the value here is an accurate ROSTER of bathrooms read from the
+// plan, deduped across sheets.
+function bathroomSkeletonFromTextLayer(uniqueBaths) {
+  return (uniqueBaths || []).map((u, i) => ({
+    id: 'tl-bath-' + (i + 1),
+    name: u.name,
+    ceiling: { value: 'TBD', conf: 'low', mode: 'auto' },
+    shower: {
+      type: { value: '— TBD —', conf: 'low', mode: 'auto' },
+      dims: { value: 'TBD', conf: 'low', mode: 'auto' },
+      features: [],
+      walls: null,
+    },
+    vanity: {
+      count: 0,
+      dims: { value: 'TBD', conf: 'low', mode: 'auto' },
+      wallWidth: { value: null, conf: 'low', mode: 'auto' },
+    },
+    mirror: { value: 'TBD', conf: 'low', mode: 'auto' },
+    flags: [{ kind: 'attn', text: 'Read from plan labels — confirm shower, vanity count, and dimensions' }],
+    _planDims: u.planDims || [],
+    _provenance: { source: 'text-layer', sheets: u.sheets || [], instances: u.count || (u.instances ? u.instances.length : 0) },
+  }));
+}
+
+// When the vision pipeline produced the bathroom list, fold in any bath that the
+// plan's text layer found but vision missed (and vice-versa is left to vision).
+// Never removes a vision bath — only backfills, flagged for confirmation.
+function reconcileBathsWithTextLayer(result, uniqueBaths) {
+  if (!result || !Array.isArray(result.bathrooms) || !uniqueBaths || !uniqueBaths.length) return;
+  const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  for (const sk of bathroomSkeletonFromTextLayer(uniqueBaths)) {
+    const k = norm(sk.name);
+    const present = result.bathrooms.some(b => {
+      const bk = norm(b.name);
+      return bk === k || bk.includes(k) || k.includes(bk);
+    });
+    if (!present) {
+      sk.flags = [{ kind: 'attn', text: 'Found in plan text but not in vision pass — confirm this bathroom' }];
+      result.bathrooms.push(sk);
+    }
+  }
+}
+
+// Reconstruct readable text "runs" (labels/phrases) from raw pdf.js items.
+//
+// Why this exists: architectural / CAD PDFs vary wildly. Some emit a whole label
+// as one text item ("Vanity", "Mirror Size Shown: 36\"x52\""). Others emit ONE
+// GLYPH PER ITEM with letter-spacing ("B" "A" "T" "H" "3"), and pack several
+// unrelated labels onto the same horizontal band across a 36"-wide sheet. A naive
+// "join everything on the same y with spaces" turns that into unreadable soup and
+// detects nothing.
+//
+// assembleTextRuns is builder-agnostic: it groups items into y-bands, then walks
+// each band left-to-right splitting into phrases by the horizontal GAP between
+// items measured relative to font size (glyph height). Tight gaps concatenate
+// (rebuilding "BATH"); a word-space gap inserts a single space ("BATH 3"); a big
+// gap starts a new phrase (so the neighbouring "BEDROOM 5" stays separate).
+// Returns: [{ str, x, y, fontSize, items }] — x,y = top-left of the phrase.
+function assembleTextRuns(items) {
+  if (!items || !items.length) return [];
+  const sorted = items.slice().sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+  // 1) Band items by y. New band when the y-jump exceeds the tolerance, which we
+  //    scale to the current glyph height so big-font labels and tiny dimension
+  //    text don't get forced together.
+  const bands = [];
+  for (const it of sorted) {
+    const tol = Math.max(4, (it.height || 8) * 0.6);
+    let band = null;
+    for (let b = bands.length - 1; b >= 0; b--) {
+      if (Math.abs(bands[b].y - it.y) <= tol) { band = bands[b]; break; }
+      if (bands[b].y < it.y - tol) break; // sorted by y — no earlier band can match
+    }
+    if (!band) { band = { y: it.y, items: [] }; bands.push(band); }
+    band.items.push(it);
+  }
+
+  // 2) Within each band, split into phrases by x-gap relative to font size.
+  const runs = [];
+  for (const band of bands) {
+    const its = band.items.slice().sort((a, b) => a.x - b.x);
+    let cur = null;
+    for (const it of its) {
+      const fs = it.height || it.width || 8;
+      const adv = it.width || fs * 0.55; // glyph advance / item width
+      if (!cur) {
+        cur = { str: it.str, x: it.x, y: it.y, fontSize: fs, right: it.x + adv, items: [it] };
+        continue;
+      }
+      const gap = it.x - cur.right;
+      const ref = Math.max(fs, cur.fontSize);
+      // Heavy overlap (the item starts well before the previous one ended) means
+      // an overstruck duplicate — common in faux-bold text where each glyph is
+      // drawn twice. Drop it so we don't fuse "BATH" + "MASTER" into "BATHMASTER"
+      // and break word boundaries. A single-glyph kerning overlap is < one font
+      // size and is kept.
+      if (gap < -ref) { continue; }
+      if (gap > ref * 1.6) {
+        // big gap → a different label on the same band
+        runs.push(cur);
+        cur = { str: it.str, x: it.x, y: it.y, fontSize: fs, right: it.x + adv, items: [it] };
+      } else {
+        // same phrase — insert a space only for a real word gap
+        const sep = gap > ref * 0.22 ? ' ' : '';
+        cur.str += sep + it.str;
+        cur.right = it.x + adv;
+        cur.fontSize = Math.max(cur.fontSize, fs);
+        cur.items.push(it);
+      }
+    }
+    if (cur) runs.push(cur);
+  }
+  // Tidy: collapse any accidental double spaces from items that already carried one.
+  runs.forEach(r => { r.str = r.str.replace(/\s{2,}/g, ' ').trim(); });
+  return runs;
+}
+
 // Match mirror labels to bath rooms by page + spatial proximity.
 // Returns: { [roomName]: { mirror, distance } } — only confident matches; ambiguous ones omitted.
 // Strategy: for each mirror label, find the closest room label on the SAME PAGE.
 // If a single room is unambiguously nearest, link them. If the same room is the closest
 // match for multiple mirrors, both link (multi-vanity bath).
 function associateLabelsToRooms(mirrorLabels, roomLabels) {
-  const associations = []; // [{ mirror, room, distance }]
+  const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const associations = []; // [{ mirror, room, distance, confident }]
   for (const m of mirrorLabels) {
-    const sameSheet = roomLabels.filter(r => r.pageNum === m.pageNum);
+    // "Same sheet" = same source file AND same page number. Filtering on page
+    // number alone collides across files (file A page 7 vs file B page 7), which
+    // would spatially bind a mirror to a room it never shared a drawing with.
+    const sameSheet = roomLabels.filter(r =>
+      r.pageNum === m.pageNum && (r.sourceFile || null) === (m.sourceFile || null));
     if (sameSheet.length === 0) continue; // no rooms on this sheet
-    // Compute distance to each room on same page
-    const scored = sameSheet.map(r => ({
-      room: r,
-      distance: Math.sqrt(Math.pow(m.x - r.x, 2) + Math.pow(m.y - r.y, 2)),
-    })).sort((a, b) => a.distance - b.distance);
+    // Distance to each room, with a directional bias: on elevation sheets the mirror
+    // callout sits ABOVE its room title, so prefer a bath label below the mirror. A
+    // label above the mirror is penalized (×2) so a sandwiched bath (e.g. Primary,
+    // whose title is below its 3 mirrors) wins over the row of baths above it.
+    const scored = sameSheet.map(r => {
+      const dx = Math.abs(m.x - r.x), dy = Math.abs(m.y - r.y);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const below = r.y >= (m.y - 5);
+      // Elevations are laid out in columns (each bath's drawing is a vertical strip),
+      // so horizontal distance matters more — weight dx, and prefer labels below.
+      const eff = Math.sqrt(Math.pow(dx * 1.8, 2) + dy * dy) * (below ? 1 : 2);
+      return { room: r, distance: dist, dx, below, eff };
+    }).sort((a, b) => a.eff - b.eff);
     const closest = scored[0];
-    const secondClosest = scored[1];
-    // Confident if closest is meaningfully closer than runner-up (>1.5x ratio) OR alone
-    const isConfident = !secondClosest || (secondClosest.distance > closest.distance * 1.5);
-    associations.push({ mirror: m, room: closest.room, distance: closest.distance, confident: isConfident });
+    // Runner-up for the confidence ratio must be a DIFFERENTLY-named room.
+    const nearestOther = scored.find(s => norm(s.room.name) !== norm(closest.room.name));
+    const ratioOk = !nearestOther || (nearestOther.eff > closest.eff * 1.5);
+    // Absolute plausibility gate: a mirror label shouldn't sit half a sheet away.
+    const pageW = m.pageW || closest.room.pageW || 0;
+    const pageH = m.pageH || closest.room.pageH || 0;
+    const diag = (pageW && pageH) ? Math.sqrt(pageW * pageW + pageH * pageH) : 0;
+    const withinRange = diag ? (closest.distance <= diag * 0.5) : true;
+    associations.push({
+      mirror: m,
+      room: closest.room,
+      distance: closest.distance,
+      confident: withinRange && ratioOk,
+    });
   }
   return associations;
+}
+
+// =============== PLAN DIMENSIONS & SCALE (hybrid measure) ===============
+// Architectural scales express how much real length one paper-inch represents.
+// "1/4\" = 1'" → 1/4 paper-inch = 12" real → 1 paper-inch = 48" real (the multiplier).
+const SCALE_MULTIPLIERS = {
+  '1/8"=1\'': 96, '3/16"=1\'': 64, '1/4"=1\'': 48, '3/8"=1\'': 32,
+  '1/2"=1\'': 24, '3/4"=1\'': 16, '1"=1\'': 12, '1-1/2"=1\'': 8, '3"=1\'': 4,
+};
+
+// Multiplier (real inches per paper inch) from "paper inches per foot" (e.g. 0.25 → 48).
+function scaleMultiplierFromRatio(paperInchesPerFoot) {
+  return paperInchesPerFoot ? 12 / paperInchesPerFoot : null;
+}
+
+// Parse a title-block scale note. Handles "1/4\" = 1'-0\"", "3/4\"=1'", and "AS NOTED".
+// Returns { label, multiplier, asNoted } or null.
+function parseScaleNote(text) {
+  const t = String(text || '');
+  if (/scale\s*[:=]?\s*as\s+noted/i.test(t) || /\bas\s+noted\b/i.test(t)) {
+    return { label: 'AS NOTED', multiplier: null, asNoted: true };
+  }
+  const m = t.match(/(\d+(?:\s*-\s*\d+)?(?:\s*\/\s*\d+)?)\s*"?\s*=\s*1\s*'(?:\s*-?\s*0\s*")?/);
+  if (m) {
+    const paperIn = toInches(m[1].replace(/\s+/g, '') + '"');
+    const mult = scaleMultiplierFromRatio(paperIn);
+    if (mult) return { label: (m[1].replace(/\s+/g, '') + '" = 1\''), multiplier: mult, paperInchesPerFoot: paperIn };
+  }
+  return null;
+}
+
+// Convert an on-screen pixel distance to real inches. Provide EITHER a calibration
+// (pxPerRealInch, from clicking a known dimension) OR a scale multiplier together
+// with the render's pixels-per-paper-inch.
+function pixelsToRealInches(pixelDist, opts) {
+  opts = opts || {};
+  if (opts.pxPerRealInch) return pixelDist / opts.pxPerRealInch;
+  if (opts.scaleMultiplier && opts.pxPerPaperInch) {
+    return (pixelDist / opts.pxPerPaperInch) * opts.scaleMultiplier;
+  }
+  return null;
+}
+
+// Calibrate by clicking the two ends of a KNOWN dimension and entering its real
+// length — returns pixels-per-real-inch, independent of zoom/DPI/scale.
+function calibrateScale(pixelDist, knownRealInches) {
+  return (pixelDist && knownRealInches) ? pixelDist / knownRealInches : null;
+}
+
+// Pull dimension tokens (e.g. 2'-10", 5'-3 1/2", 48") out of a single text string.
+// Skips W×H pairs (mirror sizes) and bare numbers without a foot/inch mark.
+function parseDimensionTokens(str) {
+  const s = String(str || '');
+  if (/\d+\s*["']?\s*[x×✕]\s*\d+/i.test(s)) return [];
+  const out = [];
+  const re = /\d+\s*'\s*-?\s*\d*(?:\s+\d+\s*\/\s*\d+)?\s*"?|\d+(?:\s+\d+\s*\/\s*\d+)?\s*"/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const raw = m[0].trim();
+    if (!/['"]/.test(raw)) continue; // must carry a foot or inch mark to count as a dimension
+    const inches = toInches(raw);
+    if (inches != null && inches >= 2 && inches <= 600) out.push({ raw, inches });
+  }
+  return out;
+}
+
+// Auto-read every printed dimension on the plan (text-layer). Returns
+// [{ raw, inches, x, y, pageNum }] — these feed the "auto" half of the hybrid; the
+// measure tool covers walls the plan didn't label.
+function findDimensionLabels(textLayers) {
+  if (!textLayers) return [];
+  const out = [];
+  for (const page of textLayers) {
+    const pageW = page.viewport?.width || 0;
+    const pageH = page.viewport?.height || 0;
+    for (const run of assembleTextRuns(page.items)) {
+      for (const d of parseDimensionTokens(run.str)) {
+        out.push({ raw: d.raw, inches: d.inches, x: run.x, y: run.y, pageNum: page.pageNum, pageW, pageH });
+      }
+    }
+  }
+  return out;
+}
+
+// Associate printed dimensions to the nearest bathroom on the same sheet, so each
+// bath gets a shortlist of plan dimensions near it (the "auto-read" candidates that
+// fill shower openings / panel widths). Returns { [normalizedName]: { name, dims:[…] } }.
+function associateDimsToBaths(dims, rooms) {
+  const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const baths = (rooms || []).filter(r => r && r.isBath !== false);
+  const byBath = {};
+  baths.forEach(b => { byBath[norm(b.name)] = byBath[norm(b.name)] || { name: b.name, dims: [] }; });
+  for (const d of (dims || [])) {
+    if (d.inches < 12 || d.inches > 180) continue; // plausible shower/panel range
+    const sameSheet = baths.filter(b => b.pageNum === d.pageNum && (b.sourceFile || null) === (d.sourceFile || null));
+    if (!sameSheet.length) continue;
+    let best = null;
+    for (const b of sameSheet) {
+      const dist = Math.sqrt(Math.pow(b.x - d.x, 2) + Math.pow(b.y - d.y, 2));
+      if (!best || dist < best.dist) best = { b, dist };
+    }
+    if (!best) continue;
+    const diag = (d.pageW && d.pageH) ? Math.sqrt(d.pageW * d.pageW + d.pageH * d.pageH) : 0;
+    if (diag && best.dist > diag * 0.25) continue; // too far from any bath to be related
+    byBath[norm(best.b.name)].dims.push({ raw: d.raw, inches: d.inches, dist: Math.round(best.dist), pageNum: d.pageNum });
+  }
+  // nearest-first, dedupe repeated values
+  Object.values(byBath).forEach(e => {
+    e.dims.sort((a, b) => a.dist - b.dist);
+    const seen = new Set();
+    e.dims = e.dims.filter(x => (seen.has(x.raw) ? false : (seen.add(x.raw), true))).slice(0, 12);
+  });
+  return byBath;
 }
 
 // Master entry: extract text layers from all uploaded PDFs and return findings.
@@ -3390,18 +4185,32 @@ async function runTextLayerExtraction(files) {
       result.pagesByFile[file.name] = pages;
       const mirrors = findMirrorLabels(pages);
       const rooms = findRoomLabelsTL(pages);
+      const dims = findDimensionLabels(pages);
       // Tag with source file for provenance
       mirrors.forEach(m => m.sourceFile = file.name);
       rooms.forEach(r => r.sourceFile = file.name);
+      dims.forEach(d => d.sourceFile = file.name);
       result.mirrors.push(...mirrors);
       result.rooms.push(...rooms);
+      result.dimensions = result.dimensions || [];
+      result.dimensions.push(...dims);
     } catch (e) {
       console.warn('[ScopeKit TL] failed to extract text from', file.name, e);
     }
   }
+  result.dimensions = result.dimensions || [];
   // Filter out non-bath labels (Water Closets etc.) from association pool
   const bathRooms = result.rooms.filter(r => r.isBath !== false);
   result.associations = associateLabelsToRooms(result.mirrors, bathRooms);
+
+  // Canonical, deduped bathroom roster across every sheet/file.
+  result.uniqueBaths = dedupeRoomsAcrossSheets(result.rooms);
+
+  // Auto-read: printed dimensions near each bath (candidates that fill openings /
+  // panel widths). Attach the shortlist to each canonical bath so the review +
+  // config UI can offer them as quick-fill.
+  result.dimsByBath = associateDimsToBaths(result.dimensions, bathRooms);
+  result.uniqueBaths.forEach(u => { u.planDims = (result.dimsByBath[u.key] || {}).dims || []; });
 
   // Debug: log per-page findings so we can diagnose quickly
   const perPage = {};
@@ -3418,6 +4227,8 @@ async function runTextLayerExtraction(files) {
     mirrorCount: result.mirrors.length,
     roomCount: result.rooms.length,
     bathRoomCount: bathRooms.length,
+    distinctBaths: result.uniqueBaths.length,
+    distinctBathNames: result.uniqueBaths.map(b => b.name + ' (' + b.count + '× on sheets ' + b.sheets.join(',') + ')'),
     associationCount: result.associations.length,
     perPage,
   });
@@ -3807,6 +4618,10 @@ async function runExtraction() {
   // files are images, run the field-measure vision extraction instead of plan extraction.
   const allImages = state.planFiles.length > 0 && state.planFiles.every(f => (f.type || '').startsWith('image/'));
 
+  // Notes-first: parse the builder communication into directives BEFORE we touch
+  // the plan, so scope limits and mirror-source pointers can steer extraction.
+  state.notesDirectives = parseNotesDirectives(state.comm || '');
+
   let extractionResult = null;
   try {
     if (allImages) {
@@ -3818,25 +4633,45 @@ async function runExtraction() {
       extractionResult = { bathrooms: [], otherItems: [], scaleStatus: null };
       // If the extraction surfaced job header info, persist address.
       if (fmData?.job?.address && !state.address) state.address = fmData.job.address;
-    } else if (API_CONFIG.workerUrl) {
-      // Phase 1a: run text-layer extraction FIRST to capture literal labels
-      // (mirror sizes, room names). These become ground truth for the review.
+    } else {
+      // Plan PDFs (not pure images). Always read the embedded text layer first —
+      // it is the most reliable source of room/bath labels and literal sizes, and
+      // it works with or without the vision Worker. The text layer also gives us
+      // the canonical, deduped bathroom roster across all sheets.
       let textLayerData = null;
       try {
         textLayerData = await runTextLayerExtraction(state.planFiles);
       } catch (tlErr) {
-        console.warn('[ScopeKit] Text-layer extraction failed (continuing with vision only):', tlErr);
+        console.warn('[ScopeKit] Text-layer extraction failed:', tlErr);
       }
-      extractionResult = await extractViaWorker();
-      if (textLayerData) {
-        extractionResult = await overrideMirrorsFromTextLayer(extractionResult, textLayerData);
+      const tlBaths = (textLayerData && textLayerData.uniqueBaths) || [];
+
+      if (API_CONFIG.workerUrl) {
+        // Vision pipeline available: it builds the detailed skeleton; the text
+        // layer corrects mirror sizes and backfills any bath vision missed.
+        extractionResult = await extractViaWorker();
+        if (textLayerData) {
+          extractionResult = await overrideMirrorsFromTextLayer(extractionResult, textLayerData, state.notesDirectives);
+        }
+        reconcileBathsWithTextLayer(extractionResult, tlBaths);
+      } else if (tlBaths.length) {
+        // No Worker (in-app preview): seed the review straight from the plan's
+        // text layer so we show the REAL bathrooms — deduped across sheets — not
+        // mock data. This is what makes "5 distinct baths" appear instead of 17.
+        extractionResult = {
+          bathrooms: bathroomSkeletonFromTextLayer(tlBaths),
+          otherItems: [],
+          scaleStatus: null,
+        };
+        if (textLayerData) {
+          extractionResult = await overrideMirrorsFromTextLayer(extractionResult, textLayerData, state.notesDirectives);
+        }
+      } else if (state.intakeMode === 'builder' && state.comm && state.comm.trim().length > 20) {
+        // No readable text layer — fall back to parsing the comm block.
+        extractionResult = await extractCommViaClaude();
+      } else {
+        extractionResult = mockExtraction();
       }
-    } else if (state.intakeMode === 'builder' && state.comm && state.comm.trim().length > 20) {
-      // In-artifact preview: use Claude to actually parse the comm block.
-      // Plan PDF parsing requires the Worker (pdf.js + raster vision pipeline).
-      extractionResult = await extractCommViaClaude();
-    } else {
-      extractionResult = mockExtraction();
     }
   } catch (err) {
     console.warn('Extraction failed, falling back to mock:', err);
@@ -3850,6 +4685,10 @@ async function runExtraction() {
   if (state.comm && state.comm.trim()) {
     parseCommBlock(state.comm);
   }
+
+  // Notes-first: enforce any scope limit (hide baths not named in the notes).
+  // Runs last so it also trims baths added by the comm parser.
+  applyScopeDirectives();
 
   state.extracting = false;
   gotoStep('review');
@@ -4766,12 +5605,29 @@ function mockExtraction() {
 // Called from runExtraction after extractViaWorker returns.
 // If we find unambiguous "Mirror Size: X x Y" labels in the PDF text layer,
 // they REPLACE whatever the vision model invented for those baths.
-async function overrideMirrorsFromTextLayer(result, textLayerData) {
+async function overrideMirrorsFromTextLayer(result, textLayerData, directives) {
   if (!textLayerData || !result || !Array.isArray(result.bathrooms)) return result;
   const baths = result.bathrooms;
-  const assocs = textLayerData.associations || [];
-  const allMirrors = textLayerData.mirrors || [];
+  let assocs = textLayerData.associations || [];
+  let allMirrors = textLayerData.mirrors || [];
   const unmatched = []; // mirror labels we couldn't auto-assign
+
+  // Notes-first: if the builder's notes point us at a specific page for mirror
+  // sizes ("see page 8 for mirror measurements"), treat those pages as the
+  // authoritative source and ignore mirror labels found elsewhere. The note
+  // wins over anything auto-detected on other sheets.
+  const srcPages = (directives && directives.mirrorSourcePages) || [];
+  if (srcPages.length) {
+    const pset = new Set(srcPages);
+    const onPages = allMirrors.filter(m => pset.has(m.pageNum));
+    if (onPages.length) {
+      allMirrors = onPages;
+      assocs = assocs.filter(a => a.mirror && pset.has(a.mirror.pageNum));
+      console.log('[ScopeKit] Notes directive: prioritizing mirror sizes from page(s) ' + srcPages.join(', ') + ' (' + onPages.length + ' label' + (onPages.length === 1 ? '' : 's') + ')');
+    } else {
+      console.warn('[ScopeKit] Notes pointed to page(s) ' + srcPages.join(', ') + ' for mirror sizes, but no mirror labels were found there.');
+    }
+  }
 
   // ----- Zip-by-count fallback -----
   // If we found mirror labels in the text layer but couldn't associate them
@@ -4843,20 +5699,27 @@ async function overrideMirrorsFromTextLayer(result, textLayerData) {
       }
     }
     if (matches && matches.length) {
-      const vanityCount = bath.vanity?.count || 1;
-      // If we have multiple mirror labels and they match vanity count, combine
-      const sizesStr = matches.length > 1
-        ? matches.length + 'x ' + matches[0].value + (matches.every(m => m.value === matches[0].value) ? '' : ' (sizes vary — see provenance)')
-        : (vanityCount > 1 ? vanityCount + 'x ' + matches[0].value : matches[0].value);
+      // Group identical size+shape so we can write "2× 36" x 52" + 28" x 56" (Rectangle)".
+      const groups = [];
+      for (const mm of matches) {
+        const key = mm.value + '|' + (mm.shape || '');
+        const g = groups.find(x => x.key === key);
+        if (g) g.n++; else groups.push({ key, n: 1, value: mm.value, shape: mm.shape || null });
+      }
+      const sizesStr = groups.map(g => (g.n > 1 ? g.n + '× ' : '') + g.value).join(' + ');
+      // Shape: if every mirror shares one shape, name it; else leave generic.
+      const shapes = Array.from(new Set(matches.map(m => m.shape).filter(Boolean)));
+      const shapeStr = shapes.length === 1 ? ' (' + shapes[0] + ')' : (shapes.length ? ' (' + shapes.join('/') + ')' : '');
       bath.mirror = {
-        value: sizesStr,
+        value: sizesStr + shapeStr,
         conf: 'high',
         mode: 'auto',
         _provenance: {
           source: 'text-layer',
           page: matches[0].pageNum,
           file: matches[0].sourceFile,
-          raw: matches[0].raw,
+          raw: matches.map(m => m.raw).slice(0, 4).join(' | '),
+          count: matches.length,
         },
       };
     } else if (bath.mirror) {
@@ -4910,6 +5773,96 @@ function applyExtraction(result) {
 }
 
 // =============== Communication parser ===============
+// =============== NOTES DIRECTIVES (notes-first) ===============
+// The builder communication ("notes") OUTRANKS plan auto-detection. Two kinds of
+// directive are recognized:
+//   1) Scope limit — "only quote showers for the Primary Bath and Bath 2" → a
+//      bath allowlist; baths not named are dropped entirely from the job.
+//   2) Mirror source — "see page 8 for the mirror sizes" → page numbers that
+//      become the authoritative source for mirror measurements.
+// Returns: { bathAllowlist:[names]|null, scopeType, mirrorSourcePages:[n…], preferPlanMirrors }
+function parseNotesDirectives(comm) {
+  const out = { bathAllowlist: null, scopeType: null, mirrorSourcePages: [], preferPlanMirrors: false };
+  const text = (comm || '').trim();
+  if (!text) return out;
+
+  const LIMIT = /\b(?:only|just|exclusively|nothing\s+but|solely|focus(?:ing)?\s+on|right\s+now|for\s+now|at\s+this\s+time)\b/i;
+  const allow = [];
+  let scopeType = null;
+
+  // Work sentence-by-sentence so a limit word binds to baths in the same clause.
+  const sentences = text.split(/[\n.;!?]+/).map(s => s.trim()).filter(Boolean);
+  for (const s of sentences) {
+    if (LIMIT.test(s)) {
+      const baths = extractBathNamesFromText(s);
+      if (baths.length) {
+        allow.push(...baths);
+        if (/\b(?:showers?|enclosures?)\b/i.test(s)) scopeType = scopeType || 'shower';
+        else if (/\bmirror/i.test(s)) scopeType = scopeType || 'mirror';
+      }
+    }
+    if (/\bmirror/i.test(s)) {
+      const re = /\b(?:page|pg\.?|p\.?|sheet|sht\.?)\s*#?\s*(\d{1,3})\b/gi;
+      let m;
+      while ((m = re.exec(s)) !== null) out.mirrorSourcePages.push(parseInt(m[1], 10));
+      if (/\b(?:use|prefer|actual|exact|listed|shown|given|provided)\b/i.test(s)) out.preferPlanMirrors = true;
+    }
+  }
+
+  if (allow.length) { out.bathAllowlist = Array.from(new Set(allow)); out.scopeType = scopeType || 'all'; }
+  out.mirrorSourcePages = Array.from(new Set(out.mirrorSourcePages)).sort((a, b) => a - b);
+  if (out.mirrorSourcePages.length) out.preferPlanMirrors = true;
+  return out;
+}
+
+// Pull canonical bathroom names out of free-text notes (same naming vocabulary
+// the plan reader uses). Returns de-duplicated canonical names.
+function extractBathNamesFromText(text) {
+  const t = text || '';
+  const pats = [
+    [/\bprimary\s+bath(?:room)?\b/i, () => 'Primary Bath'],
+    [/\bmaster\s+bath(?:room)?\b/i, () => 'Master Bath'],
+    [/\bowner'?s?\s+(?:suite\s+)?bath(?:room)?\b/i, () => "Owner's Bath"],
+    [/\bhalf\s+bath(?:room)?\b/i, () => 'Half Bath'],
+    [/(?:\b1\s*[\/⁄]\s*2|½)\s*bath(?:room)?\b/i, () => 'Half Bath'],
+    [/\bpowder(?:\s+(?:bath|room))?\b/i, () => 'Powder Room'],
+    [/\bguest\s+bath(?:room)?\b/i, () => 'Guest Bath'],
+    [/\bhall\s+bath(?:room)?\b/i, () => 'Hall Bath'],
+    [/\bjack\s*(?:and|&|n|'n')?\s*jill\b/i, () => 'Jack and Jill'],
+    [/\bbath(?:room)?\s*(?:#|no\.?)?\s*(\d+)\b/i, (m) => 'Bath ' + m[1]],
+  ];
+  const found = [];
+  for (const [re, name] of pats) {
+    const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
+    let m;
+    while ((m = g.exec(t)) !== null) found.push(name(m));
+  }
+  return Array.from(new Set(found));
+}
+
+// Apply a scope-limit directive by hiding every bath not on the allowlist.
+// (User choice: hide entirely.) No-op when there's no allowlist or nothing matches.
+function applyScopeDirectives() {
+  const d = state.notesDirectives;
+  if (!d || !d.bathAllowlist || !d.bathAllowlist.length) return;
+  const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const allow = d.bathAllowlist.map(norm);
+  const inScope = (name) => {
+    const bk = norm(name);
+    return allow.some(a => bk === a || bk.includes(a) || a.includes(bk));
+  };
+  const before = (state.bathrooms || []).length;
+  const kept = (state.bathrooms || []).filter(b => inScope(b.name));
+  if (kept.length) { // safety: never blank the job if nothing matched
+    state.bathrooms = kept;
+    const hidden = before - kept.length;
+    state.scopeNote = 'Scoped to ' + d.bathAllowlist.join(' + ') + ' per your notes'
+      + (hidden > 0 ? ' — ' + hidden + ' other bath' + (hidden === 1 ? '' : 's') + ' hidden.' : '.');
+  } else {
+    console.warn('[ScopeKit] Scope directive named ' + d.bathAllowlist.join(', ') + ' but no bathroom matched — keeping all.');
+  }
+}
+
 function parseCommBlock(txt) {
   // Local fallback parser — runs always; Claude parser augments when available.
   const lower = txt.toLowerCase();
@@ -6458,6 +7411,18 @@ function openCutList() {
                   <td class="cutlist-notes">${escapeHtml(sel.position)}</td>
                 </tr>
                 <tr>
+                  <td><strong>Standoffs · ${escapeHtml(mc.finish || '')}</strong></td>
+                  <td></td>
+                  <td class="cutlist-qty">${sel.count * 2}</td>
+                  <td class="cutlist-notes">D636</td>
+                </tr>
+                ${mc.framed ? `<tr>
+                  <td><strong>Frame · ${escapeHtml(mc.finish || '')}</strong></td>
+                  <td></td>
+                  <td class="cutlist-qty">${sel.count}</td>
+                  <td class="cutlist-notes">Framed mirror — frame added; glass cut same size</td>
+                </tr>` : ''}
+                <tr>
                   <td><strong>Install</strong></td>
                   <td></td>
                   <td class="cutlist-qty">${sel.count}</td>
@@ -6612,8 +7577,51 @@ function renderBathCard(bath) {
       ${bathField('Vanity dims', bath.vanity?.dims, 'vanity.dims', true)}
       ${bathField('Vanity wall width', bath.vanity?.wallWidth || { value: '—', conf: 'low', mode: 'auto' }, 'vanity.wallWidth', true)}
       ${bathField('Mirror', bath.mirror, 'mirror')}
+      ${bath._planDims && bath._planDims.length ? `
+        <div class="bathfield" style="display:block;">
+          <div class="bathfield-lbl">From plan · dimensions near this bath <span style="color:var(--muted);font-weight:400;">(focus a field, then click to fill)</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+            ${bath._planDims.slice(0, 10).map(d => `<button type="button" class="planchip" data-dim="${escapeHtml(d.raw)}" title="${escapeHtml(d.inches + '\\" — found near this bath on the plan')}" style="font:inherit;font-size:12px;padding:3px 9px;border:1px solid var(--hairline);border-radius:999px;background:var(--paper);cursor:pointer;">${escapeHtml(d.raw)}</button>`).join('')}
+          </div>
+        </div>` : ''}
+      <div style="margin-top:10px;">
+        <button type="button" class="btn ghost sm" data-measure="1">Measure on plan →</button>
+        <span style="font-size:12px;color:var(--muted);margin-left:8px;">click a field above, then measure to fill it</span>
+      </div>
     </div>
   `;
+  // Launch the interactive measure tool from this bath card.
+  c.querySelector('[data-measure]')?.addEventListener('click', () => openMeasureTool());
+
+  // "From plan" quick-fill chips: clicking a chip drops the dimension into the
+  // last-focused field. For the shower-dims field it builds "W × H" across two
+  // clicks; single-value fields (wall width, ceiling) fill directly.
+  let lastFocusedField = null;
+  c.querySelectorAll('input[data-field]').forEach(inp => {
+    inp.addEventListener('focus', () => { lastFocusedField = inp; });
+  });
+  c.querySelectorAll('.planchip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const val = chip.dataset.dim;
+      const f = lastFocusedField;
+      if (f) {
+        if (f.dataset.field === 'shower.dims') {
+          const cur = (f.value || '').trim();
+          f.value = (cur && !/[×x]/.test(cur)) ? `${cur} × ${val}` : val;
+        } else {
+          f.value = val;
+        }
+        f.dispatchEvent(new Event('input', { bubbles: true }));
+        f.focus();
+      } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(val).catch(() => {});
+        const orig = chip.textContent;
+        chip.textContent = 'copied';
+        setTimeout(() => { chip.textContent = orig; }, 800);
+      }
+    });
+  });
+
   // Wire field edits → recalc confidence to "auto" mode
   c.querySelectorAll('input[data-field]').forEach(inp => {
     inp.addEventListener('input', () => {
@@ -6753,6 +7761,8 @@ function renderConfigure() {
         state.mirrorConfigs[bath.id] = {
           mirrorHeight: builderDef.mirrorHeight || '40"',
           customMirrorHeight: '',
+          framed: false, // unframed by default (polished edge + standoffs)
+          finish: builderDef.finish || 'Brushed nickel',
           selectedOption: calc.recommendedId,
           recommendedId: calc.recommendedId,
         };
@@ -6768,6 +7778,11 @@ function renderConfigure() {
 
 function renderConfigCard(bath) {
   const cfg = state.showerConfigs[bath.id];
+  cfg.panelWidths = cfg.panelWidths || [];
+  const layoutId = (bath.shower && bath.shower.walls && bath.shower.walls.layout) || null;
+  const boxSpec = { 'box-3': { count: 3, ponyCount: 0 }, 'box-3-pony': { count: 3, ponyCount: 2 }, 'box-4-2pony': { count: 4, ponyCount: 3 } }[layoutId];
+  const isPanelOverPony = layoutId === 'inline-pony';
+  if (isPanelOverPony && !cfg.ponyHeight) cfg.ponyHeight = '42"'; // standard pony/knee wall
   const c = el('div', 'card marked');
   c.innerHTML = `
     <div class="card-h">
@@ -6777,9 +7792,9 @@ function renderConfigCard(bath) {
     <div class="grid grid-2">
       <div>
         <div class="field"><label class="field-lbl">Wall configuration</label>
-          <select class="field-select" data-cfg="config">
-            ${SHOWER_LAYOUTS.map(l => `<option value="${escapeHtml(l.label)}" ${cfg.config === l.label ? 'selected' : ''}>${escapeHtml(l.label)}</option>`).join('')}
-            <option value="Auto · alcove" ${cfg.config === 'Auto · alcove' ? 'selected' : ''}>Auto · alcove</option>
+          <select class="field-select" data-layout-select>
+            <option value="" ${!layoutId ? 'selected' : ''}>— select configuration —</option>
+            ${SHOWER_LAYOUTS.map(l => `<option value="${escapeHtml(l.id)}" ${layoutId === l.id ? 'selected' : ''}>${escapeHtml(l.label)}</option>`).join('')}
           </select></div>
         <div class="field" style="margin-top:10px;"><label class="field-lbl">Frame style</label>
           <select class="field-select" data-cfg="frame"><option>Frameless</option><option>Semi-frameless</option><option>Framed</option></select></div>
@@ -6791,7 +7806,10 @@ function renderConfigCard(bath) {
               ${GLASS_HEIGHTS.map(h => `<option ${cfg.glassHeight === h ? 'selected' : ''}>${escapeHtml(h)}</option>`).join('')}
             </select></div>
           <div class="field"><label class="field-lbl">Glass thickness</label>
-            <select class="field-select" data-cfg="glass"><option>3/8"</option><option>1/2"</option></select></div>
+            <select class="field-select" data-cfg="glass">
+              ${(GLASS_THICKNESSES.includes(cfg.glass) ? GLASS_THICKNESSES : [cfg.glass, ...GLASS_THICKNESSES].filter(Boolean))
+                .map(t => `<option ${cfg.glass === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+            </select></div>
         </div>
         ${cfg.glassHeight === 'Custom' ? `
           <div class="field" style="margin-top:10px;"><label class="field-lbl">Custom glass height</label>
@@ -6802,12 +7820,44 @@ function renderConfigCard(bath) {
       </div>
       <div>
         <div class="render-frame" data-bath-render="${escapeHtml(bath.id)}">
-          ${buildConstraintDiagram(bath, cfg, { width: 380, height: 240, showDimensions: true, showLabels: true })}
-          <div class="render-frame-caption">Constraint diagram · auto-generated from config</div>
+          ${buildShowerElevationSVG(bath, cfg)}
+          <div class="render-frame-caption">2D elevation · auto-generated from the glass sizes</div>
         </div>
         <button class="btn ghost sm" style="margin-top:10px;width:100%;" data-pipeline="${escapeHtml(bath.id)}">Preview render pipeline</button>
       </div>
     </div>
+    ${boxSpec ? `
+      <div class="field" style="margin-top:14px;border-top:1px solid var(--hairline);padding-top:12px;">
+        <label class="field-lbl">Panel widths — from the plan (type or measure)</label>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          ${Array.from({ length: boxSpec.count }).map((_, i) => {
+            const isPony = boxSpec.ponyCount > 0 && i < boxSpec.ponyCount;
+            const isDoor = i === boxSpec.count - 1;
+            const plabel = isDoor ? 'Door panel' : (isPony ? ('Splash panel ' + (i + 1) + ' · on pony') : ('Fixed panel ' + (i + 1)));
+            return `<div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:12px;color:var(--muted);min-width:170px;">${plabel}</span>
+              <input class="field-input" style="max-width:120px;" type="text" data-measure-target data-panelw="${i}" value="${escapeHtml(cfg.panelWidths[i] || '')}" placeholder='e.g. 48"' />
+              <button type="button" class="btn ghost sm" data-measurepanel="${i}">Measure</button>
+            </div>`;
+          }).join('')}
+          ${boxSpec.ponyCount > 0 ? `<div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:var(--muted);min-width:170px;">Pony wall height</span>
+            <input class="field-input" style="max-width:120px;" type="text" data-measure-target data-cfg="ponyHeight" value="${escapeHtml(cfg.ponyHeight || '')}" placeholder='e.g. 42"' />
+          </div>` : ''}
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;">Door = full glass height; splash panels = glass height − pony height. The cut list and elevation fill in as you enter these.</div>
+      </div>
+    ` : ''}
+    ${isPanelOverPony ? `
+      <div class="field" style="margin-top:14px;border-top:1px solid var(--hairline);padding-top:12px;">
+        <label class="field-lbl">Panel over pony wall (runs to ceiling)</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--muted);min-width:120px;">Pony wall height</span>
+          <input class="field-input" style="max-width:120px;" type="text" data-measure-target data-cfg="ponyHeight" value="${escapeHtml(cfg.ponyHeight || '42"')}" placeholder='e.g. 42"' />
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;">Panel width comes from the shower dims; height = ceiling (${escapeHtml(bath.ceiling?.value || '—')}) − pony height. The glass runs to the ceiling for support.</div>
+      </div>
+    ` : ''}
   `;
   // Wire selects
   c.querySelectorAll('select[data-cfg]').forEach(sel => {
@@ -6821,6 +7871,28 @@ function renderConfigCard(bath) {
   });
   c.querySelectorAll('input[data-cfg]').forEach(inp => {
     inp.addEventListener('input', () => { cfg[inp.dataset.cfg] = inp.value; });
+    inp.addEventListener('change', () => renderConfigure()); // refresh elevation/cut list
+  });
+  // Wall-configuration select drives the actual layout (and the cut list + elevation).
+  c.querySelector('[data-layout-select]')?.addEventListener('change', (e) => {
+    bath.shower = bath.shower || {};
+    bath.shower.walls = bath.shower.walls || {};
+    bath.shower.walls.layout = e.target.value || null;
+    bath.shower.walls.mode = 'manual';
+    bath.shower.walls.ambiguous = false;
+    renderConfigure();
+  });
+  // Box-config panel widths: update state on input, refresh on change, measure on demand.
+  c.querySelectorAll('input[data-panelw]').forEach(inp => {
+    inp.addEventListener('input', () => { cfg.panelWidths = cfg.panelWidths || []; cfg.panelWidths[parseInt(inp.dataset.panelw, 10)] = inp.value; });
+    inp.addEventListener('change', () => renderConfigure());
+  });
+  c.querySelectorAll('[data-measurepanel]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const inp = c.querySelector('input[data-panelw="' + btn.dataset.measurepanel + '"]');
+      if (inp) inp.focus(); // sets the measure-tool target
+      openMeasureTool();
+    });
   });
   c.querySelector('[data-pipeline]').addEventListener('click', () => {
     showRenderPipeline(bath, cfg);
@@ -6974,8 +8046,37 @@ async function runRender(payload) {
   if (meta) meta.textContent = `Generated via Flux Schnell · ${elapsed}s · click image to open full size`;
   const imgArea = $('#pipeline-render-image');
   if (imgArea) {
-    imgArea.innerHTML = `<a href="${data.image_url}" target="_blank" rel="noopener"><img src="${data.image_url}" alt="Rendered shower" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--hairline); display: block;"></a>`;
+    imgArea.innerHTML = `<a href="${data.image_url}" target="_blank" rel="noopener"><img id="render-img" crossorigin="anonymous" src="${data.image_url}" alt="In-situ render" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--hairline); display: block;"></a>`
+      + `<div style="margin-top:8px;display:flex;gap:8px;"><button class="btn ghost sm" id="save-render-png">Save PNG</button><button class="btn ghost sm" id="save-render-jpg">Save JPG</button></div>`;
+    imgArea.querySelector('#save-render-png')?.addEventListener('click', () => downloadRenderImage(data.image_url, 'png'));
+    imgArea.querySelector('#save-render-jpg')?.addEventListener('click', () => downloadRenderImage(data.image_url, 'jpg'));
   }
+}
+
+// Save the rendered in-situ image as a PNG/JPG. Draws the (CORS-enabled) image to a
+// canvas and downloads it; if the host blocks canvas export, falls back to opening
+// the original image in a new tab so it can be saved manually.
+function downloadRenderImage(url, fmt) {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+      const ctx = cv.getContext('2d');
+      if (fmt === 'jpg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); }
+      ctx.drawImage(img, 0, 0);
+      const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png';
+      const a = document.createElement('a');
+      a.href = cv.toDataURL(mime, 0.92);
+      a.download = 'scopekit-render.' + (fmt === 'jpg' ? 'jpg' : 'png');
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) {
+      window.open(url, '_blank'); // tainted canvas — let the user save the original
+    }
+  };
+  img.onerror = () => window.open(url, '_blank');
+  img.src = url;
 }
 
 function renderMirrorCard(bath) {
@@ -7008,6 +8109,13 @@ function renderMirrorCard(bath) {
           <input class="field-input" type="text" data-mhc placeholder='e.g. 36"' value="${escapeHtml(mc.customMirrorHeight || '')}" />
         </div>
       ` : '<div></div>'}
+    </div>
+    <div class="field" style="margin-top:10px;">
+      <label class="field-lbl">Mirror style</label>
+      <select class="field-select" data-framed>
+        <option value="no" ${!mc.framed ? 'selected' : ''}>Unframed · polished edge + standoffs</option>
+        <option value="yes" ${mc.framed ? 'selected' : ''}>Framed · adds frame line</option>
+      </select>
     </div>
     ${!wallW ? `
       <div style="margin-top: 12px; padding: 10px 12px; background: rgba(184,116,43,0.08); border: 1px solid rgba(184,116,43,0.3); border-radius: 4px; font-size: 13px; color: var(--warning);">
@@ -7060,6 +8168,10 @@ function renderMirrorCard(bath) {
   c.querySelector('[data-mhc]')?.addEventListener('input', e => {
     mc.customMirrorHeight = e.target.value;
   });
+  c.querySelector('[data-framed]')?.addEventListener('change', e => {
+    mc.framed = e.target.value === 'yes';
+    renderConfigure();
+  });
   c.querySelectorAll('[data-opt]').forEach(opt => {
     opt.addEventListener('click', () => {
       mc.selectedOption = opt.dataset.opt;
@@ -7068,6 +8180,131 @@ function renderMirrorCard(bath) {
   });
 
   return c;
+}
+
+// =============== INTERACTIVE MEASURE TOOL ===============
+// Remember the last-focused review field so a measurement can be sent to it.
+if (!window.__skFocusTrackerInstalled) {
+  document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.matches && e.target.matches('input[data-field], input[data-measure-target]')) window.__skLastField = e.target;
+  });
+  window.__skFocusTrackerInstalled = true;
+}
+
+// Open the plan in a canvas, calibrate the scale once, then click two points on a
+// wall to read the real length (the "measure" half of the hybrid). Measurements
+// survive zoom because the conversion is recomputed from the live render scale.
+async function openMeasureTool() {
+  if (!window.pdfjsLib) { alert('PDF engine not loaded yet — try again in a moment.'); return; }
+  const pdfFiles = (state.planFiles || []).filter(f => /\.pdf$/i.test(f.name) || (f.type || '').toLowerCase() === 'application/pdf');
+  if (!pdfFiles.length) { alert('Load a plan PDF first — the measure tool reads dimensions off the plan.'); return; }
+  try { if (pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; } catch (e) {}
+
+  const back = document.createElement('div');
+  back.style.cssText = 'position:fixed;inset:0;background:rgba(20,28,38,0.78);z-index:9999;display:flex;flex-direction:column;';
+  back.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#1d2733;color:#fff;flex-wrap:wrap;">
+      <strong style="font-size:14px;">Measure on plan</strong>
+      <select id="mt-file" style="font-size:12px;padding:4px 6px;">${pdfFiles.map((f, i) => `<option value="${i}">${escapeHtml(f.name)}</option>`).join('')}</select>
+      <span style="display:inline-flex;align-items:center;gap:4px;"><button id="mt-prev" class="btn ghost sm">‹</button><span id="mt-page" style="font-size:12px;min-width:78px;text-align:center;">Page 1</span><button id="mt-next" class="btn ghost sm">›</button></span>
+      <span style="display:inline-flex;align-items:center;gap:4px;"><button id="mt-zoomout" class="btn ghost sm">–</button><span id="mt-zoom" style="font-size:12px;width:44px;text-align:center;">100%</span><button id="mt-zoomin" class="btn ghost sm">+</button></span>
+      <span style="flex:1;"></span>
+      <button id="mt-close" class="btn ghost sm">Close ✕</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;background:#28323e;color:#fff;flex-wrap:wrap;font-size:12px;">
+      <strong>Scale:</strong> <span id="mt-scale-state" style="color:#ffd98a;">not set</span>
+      <button id="mt-calibrate" class="btn ghost sm">Calibrate on a known dim</button>
+      <span>or</span>
+      <select id="mt-ratio" style="font-size:12px;padding:4px 6px;"><option value="">pick plan scale…</option>${Object.keys(SCALE_MULTIPLIERS).map(k => `<option value="${k}">${escapeHtml(k)}</option>`).join('')}</select>
+      <span style="flex:1;"></span>
+      <strong>Length:</strong> <span id="mt-result" style="font-family:var(--mono,monospace);color:#9fe6ff;">— click two points —</span>
+      <button id="mt-use" class="btn sm" style="display:none;">Use → field</button>
+      <button id="mt-copy" class="btn ghost sm" style="display:none;">Copy</button>
+      <button id="mt-clear" class="btn ghost sm">Clear</button>
+    </div>
+    <div id="mt-stage" style="flex:1;overflow:auto;background:#0e141b;display:flex;justify-content:center;align-items:flex-start;padding:16px;">
+      <div style="position:relative;line-height:0;"><canvas id="mt-base"></canvas><canvas id="mt-overlay" style="position:absolute;left:0;top:0;cursor:crosshair;"></canvas></div>
+    </div>
+    <div style="padding:6px 16px;background:#28323e;color:#9fd9b5;font-size:11px;">Set the scale first (calibrate on a printed dimension, or pick the plan's scale), then click the two ends of a wall. To drop a result into a field: click that field on the review screen, open this tool, measure, then press “Use → field”.</div>`;
+  document.body.appendChild(back);
+
+  const $m = (sel) => back.querySelector(sel);
+  const baseCanvas = $m('#mt-base'), overlay = $m('#mt-overlay');
+  const bctx = baseCanvas.getContext('2d'), octx = overlay.getContext('2d');
+  let pdf = null, pageNum = 1, numPages = 1, zoom = 1, renderScale = 1, multiplier = null, mode = 'measure', pts = [];
+
+  const setScale = (t) => { $m('#mt-scale-state').textContent = t; };
+  const realFromPx = (d) => pixelsToRealInches(d, { scaleMultiplier: multiplier, pxPerPaperInch: 72 * renderScale });
+  const fmt = (inches) => { const ft = Math.floor(inches / 12); const r = Math.round((inches - ft * 12) * 8) / 8; return (ft ? ft + "'-" : '') + (formatSgFraction ? formatSgFraction(r) : r) + '" (' + (Math.round(inches * 8) / 8) + '")'; };
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const canvasPt = (e) => { const r = overlay.getBoundingClientRect(); return { x: (e.clientX - r.left) * (overlay.width / r.width), y: (e.clientY - r.top) * (overlay.height / r.height) }; };
+
+  function drawOverlay() {
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    const col = mode === 'calibrate' ? '#ffcf6b' : '#4fd1ff';
+    octx.fillStyle = col; octx.strokeStyle = col; octx.lineWidth = 2;
+    pts.forEach(p => { octx.beginPath(); octx.arc(p.x, p.y, 4, 0, 7); octx.fill(); });
+    if (pts.length === 2) { octx.beginPath(); octx.moveTo(pts[0].x, pts[0].y); octx.lineTo(pts[1].x, pts[1].y); octx.stroke(); }
+  }
+  async function renderPage() {
+    const page = await pdf.getPage(pageNum);
+    const base = page.getViewport({ scale: 1 });
+    const stageW = Math.max(420, $m('#mt-stage').clientWidth - 40);
+    renderScale = (stageW / base.width) * zoom;
+    const vp = page.getViewport({ scale: renderScale });
+    baseCanvas.width = overlay.width = Math.round(vp.width);
+    baseCanvas.height = overlay.height = Math.round(vp.height);
+    await page.render({ canvasContext: bctx, viewport: vp }).promise;
+    $m('#mt-page').textContent = `Page ${pageNum} / ${numPages}`;
+    $m('#mt-zoom').textContent = Math.round(zoom * 100) + '%';
+    pts = []; drawOverlay();
+  }
+  async function loadFile(i) {
+    const buf = await pdfFiles[i].arrayBuffer();
+    pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    numPages = pdf.numPages; pageNum = 1; await renderPage();
+  }
+
+  overlay.addEventListener('click', (e) => {
+    if (pts.length >= 2) pts = [];
+    pts.push(canvasPt(e)); drawOverlay();
+    if (pts.length !== 2) return;
+    const d = dist(pts[0], pts[1]);
+    if (mode === 'calibrate') {
+      const known = prompt('Real length of this dimension? (e.g. 60, 5\', 2\'-10")');
+      const inches = (known != null && known !== '') ? toInches(known) : null;
+      if (inches) { multiplier = inches / (d / (72 * renderScale)); setScale('calibrated · 1 paper-in ≈ ' + Math.round(multiplier) + '"'); mode = 'measure'; $m('#mt-calibrate').textContent = 'Re-calibrate'; }
+      pts = []; drawOverlay(); return;
+    }
+    const real = realFromPx(d);
+    if (real == null) { $m('#mt-result').textContent = 'set a scale first'; return; }
+    const inches = Math.round(real * 8) / 8;
+    $m('#mt-result').textContent = fmt(inches);
+    $m('#mt-result').dataset.inches = inches;
+    $m('#mt-use').style.display = ''; $m('#mt-copy').style.display = '';
+  });
+
+  $m('#mt-calibrate').addEventListener('click', () => { mode = 'calibrate'; pts = []; drawOverlay(); setScale('calibrating — click the two ends of a known dimension'); });
+  $m('#mt-ratio').addEventListener('change', (e) => { const k = e.target.value; if (k && SCALE_MULTIPLIERS[k]) { multiplier = SCALE_MULTIPLIERS[k]; mode = 'measure'; setScale(k + ' (' + multiplier + '× per paper-in)'); } });
+  $m('#mt-prev').addEventListener('click', async () => { if (pageNum > 1) { pageNum--; await renderPage(); } });
+  $m('#mt-next').addEventListener('click', async () => { if (pageNum < numPages) { pageNum++; await renderPage(); } });
+  $m('#mt-zoomin').addEventListener('click', async () => { zoom = Math.min(4, zoom + 0.25); await renderPage(); });
+  $m('#mt-zoomout').addEventListener('click', async () => { zoom = Math.max(0.5, zoom - 0.25); await renderPage(); });
+  $m('#mt-file').addEventListener('change', async (e) => { await loadFile(parseInt(e.target.value, 10)); });
+  $m('#mt-clear').addEventListener('click', () => { pts = []; drawOverlay(); $m('#mt-result').textContent = '— click two points —'; $m('#mt-use').style.display = 'none'; $m('#mt-copy').style.display = 'none'; });
+  $m('#mt-copy').addEventListener('click', () => { const v = $m('#mt-result').dataset.inches; if (v && navigator.clipboard) navigator.clipboard.writeText(v + '"').catch(() => {}); });
+  $m('#mt-use').addEventListener('click', () => {
+    const v = $m('#mt-result').dataset.inches; const f = window.__skLastField;
+    if (!v) return;
+    if (!f) { alert('First click into a field on the review screen (e.g. Vanity wall width), then open this tool and press Use.'); return; }
+    if (f.dataset.field === 'shower.dims') { const cur = (f.value || '').trim(); f.value = (cur && !/[×x]/.test(cur)) ? cur + ' × ' + v + '"' : v + '"'; }
+    else { f.value = v + '"'; }
+    f.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  $m('#mt-close').addEventListener('click', () => back.remove());
+  back.addEventListener('click', (e) => { if (e.target === back) back.remove(); });
+
+  try { await loadFile(0); } catch (err) { setScale('failed to load PDF: ' + (err.message || err)); }
 }
 
 // =============== OUTPUT SCREEN ===============
