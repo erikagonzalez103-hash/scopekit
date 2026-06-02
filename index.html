@@ -7960,7 +7960,7 @@ function showRenderPipeline(bath, cfg) {
       <div class="pipeline-step-content">
         <div class="desc">A 2D elevation auto-generated from your Configure step — the panels, pony wall, and glass heights to scale. (Today the photo is generated from the written description below; this elevation is your at-a-glance check that the geometry is right.)</div>
         <div class="pipeline-diagram-preview">
-          ${buildConstraintDiagram(bath, cfg, { width: 700, height: 360, showDimensions: true, showLabels: true })}
+          ${buildShowerElevationSVG(bath, cfg)}
         </div>
       </div>
     </div>
@@ -7993,11 +7993,13 @@ function showRenderPipeline(bath, cfg) {
       <div class="pipeline-step-h">
         <span class="pipeline-step-num">3</span>
         <h3>Text prompt</h3>
+        <span style="flex:1;"></span>
+        <button id="mt-copy-prompt" class="btn ghost sm">Copy prompt</button>
         <span class="tag">Materials &amp; mood</span>
       </div>
       <div class="pipeline-step-content">
-        <div class="desc">Builder profile prompt + your config selections (frame, finish, glass, treatment).</div>
-        <div class="pipeline-prompt">${escapeHtml(payload.prompt)}</div>
+        <div class="desc">Builder profile prompt + your config selections (frame, finish, glass, treatment). Paste this into any image tool (Replicate, Midjourney, etc.).</div>
+        <div class="pipeline-prompt" id="mt-prompt-text">${escapeHtml(payload.prompt)}</div>
       </div>
     </div>
 
@@ -8026,6 +8028,21 @@ function showRenderPipeline(bath, cfg) {
 
   $('#pipeline-modal-bg').classList.add('is-open');
   modal.classList.add('is-open');
+
+  // Copy-prompt button — lets the prompt be pasted into any image tool.
+  const copyBtn = modal.querySelector('#mt-copy-prompt');
+  if (copyBtn) copyBtn.addEventListener('click', () => {
+    const txt = payload.prompt || '';
+    const done = () => { copyBtn.textContent = 'Copied ✓'; setTimeout(() => { copyBtn.textContent = 'Copy prompt'; }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done).catch(() => {
+        const t = modal.querySelector('#mt-prompt-text'); if (t) { const r = document.createRange(); r.selectNodeContents(t); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } done();
+      });
+    } else {
+      const t = modal.querySelector('#mt-prompt-text'); if (t) { const r = document.createRange(); r.selectNodeContents(t); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      done();
+    }
+  });
 
   // Fire the actual render call if the worker is wired up.
   if (API_CONFIG.workerUrl && API_CONFIG.fluxEnabled) {
