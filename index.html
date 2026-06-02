@@ -3456,7 +3456,10 @@ function buildConstraintDiagram(bath, cfg, options = {}) {
 function buildRenderPayload(bath, cfg) {
   const builder = BUILDERS.find(b => b.id === state.builder);
   const profile = RENDER_PROFILES[state.builder] || RENDER_PROFILES['home-owner'];
-  const constraintSvg = buildConstraintDiagram(bath, cfg, { monochrome: true, showLabels: false, showDimensions: false });
+  // Use the general 2D elevation (handles every config: panel-over-pony, sliders,
+  // box, tub, etc.) — the old inline-2-only constraint diagram drew the wrong shape
+  // and garbled labels for anything that isn't a door+fixed-over-pony.
+  const constraintSvg = buildShowerElevationSVG(bath, cfg);
   return {
     bathId: bath.id,
     builderId: state.builder,
@@ -5713,7 +5716,7 @@ async function overrideMirrorsFromTextLayer(result, textLayerData, directives) {
       for (const mm of matches) {
         const key = mm.value + '|' + (mm.shape || '');
         const g = groups.find(x => x.key === key);
-        if (g) g.n++; else groups.push({ key, n: 1, value: mm.value, shape: mm.shape || null });
+        if (g) g.n++; else groups.push({ key, n: 1, value: mm.value, shape: mm.shape || null, widthIn: mm.widthIn, heightIn: mm.heightIn });
       }
       const sizesStr = groups.map(g => (g.n > 1 ? g.n + '× ' : '') + g.value).join(' + ');
       // Shape: if every mirror shares one shape, name it; else leave generic.
@@ -5723,6 +5726,9 @@ async function overrideMirrorsFromTextLayer(result, textLayerData, directives) {
         value: sizesStr + shapeStr,
         conf: 'high',
         mode: 'auto',
+        // Exact pieces straight from the plan — the cut list and mirror card use
+        // THESE instead of recalculating from wall width.
+        pieces: groups.map(g => ({ count: g.n, widthIn: g.widthIn, heightIn: g.heightIn, shape: g.shape, value: g.value })),
         _provenance: {
           source: 'text-layer',
           page: matches[0].pageNum,
@@ -7391,6 +7397,26 @@ function openCutList() {
     const mc = state.mirrorConfigs?.[b.id];
     const wallW = toInches(b.vanity?.wallWidth?.value);
 
+    // Path 0: EXACT mirror pieces read off the plan — use verbatim, never recalc.
+    if (b.mirror && Array.isArray(b.mirror.pieces) && b.mirror.pieces.length) {
+      const finish = (mc && mc.finish) || (BUILDERS.find(x => x.id === state.builder)?.defaults?.finish) || '';
+      const framed = mc && mc.framed;
+      let total = 0, rows = '';
+      b.mirror.pieces.forEach(p => {
+        total += (p.count || 1);
+        const sizeStr = (p.widthIn != null && p.heightIn != null)
+          ? formatFraction(p.widthIn) + '" × ' + formatFraction(p.heightIn) + '"'
+          : (p.value || '—');
+        rows += `<tr><td><strong>1/4" Mirror · Polished edge</strong>${p.shape ? `<div class="cutlist-sub">${escapeHtml(p.shape)}</div>` : ''}</td><td class="cutlist-size">${escapeHtml(sizeStr)}</td><td class="cutlist-qty">${p.count || 1}</td><td class="cutlist-notes">from plan</td></tr>`;
+      });
+      rows += `<tr><td><strong>Standoffs · ${escapeHtml(finish)}</strong></td><td></td><td class="cutlist-qty">${total * 2}</td><td class="cutlist-notes">D636</td></tr>`;
+      if (framed) rows += `<tr><td><strong>Frame · ${escapeHtml(finish)}</strong></td><td></td><td class="cutlist-qty">${total}</td><td class="cutlist-notes">Framed — glass cut same size</td></tr>`;
+      rows += `<tr><td><strong>Install</strong></td><td></td><td class="cutlist-qty">${total}</td><td class="cutlist-notes"></td></tr>`;
+      const decorative = b.mirror.pieces.some(p => p.shape && !/rectangle/i.test(p.shape));
+      html += `<div class="cutlist-block"><div class="cutlist-block-h"><span class="cutlist-block-loc">${escapeHtml(b.name).toUpperCase()}</span><span class="cutlist-block-title">Vanity Mirror${total > 1 ? 's' : ''}${decorative ? ' · decorative shape' : ''}</span><span class="cutlist-block-qty">× ${total}</span></div><table class="cutlist-table"><colgroup><col class="col-desc"/><col class="col-size"/><col class="col-qty"/><col class="col-notes"/></colgroup><thead><tr><th>Description</th><th>Size</th><th>Qty</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      return; // exact plan pieces rendered — skip the wall-width calc
+    }
+
     // Path A: configured mirror calculation (preferred when configured)
     if (mc && wallW) {
       const heightStr = mc.mirrorHeight === 'Custom' ? (mc.customMirrorHeight || '40"') : mc.mirrorHeight;
@@ -7932,7 +7958,7 @@ function showRenderPipeline(bath, cfg) {
         <span class="tag">Geometry</span>
       </div>
       <div class="pipeline-step-content">
-        <div class="desc">Auto-generated from your Configure step. Locks in the door position, pony wall location, glass height. Sent to ControlNet so the AI can't get the geometry wrong.</div>
+        <div class="desc">A 2D elevation auto-generated from your Configure step — the panels, pony wall, and glass heights to scale. (Today the photo is generated from the written description below; this elevation is your at-a-glance check that the geometry is right.)</div>
         <div class="pipeline-diagram-preview">
           ${buildConstraintDiagram(bath, cfg, { width: 700, height: 360, showDimensions: true, showLabels: true })}
         </div>
@@ -8100,74 +8126,45 @@ function renderMirrorCard(bath) {
   const wallWStr = wallW ? fromInches(wallW, true) : '—';
   const calc = calcMirrorOptions(wallW, bath.vanity?.count || 1, heightIn);
 
-  c.innerHTML = `
-    <div class="card-h">
-      <h3 class="card-title">${escapeHtml(bath.name)} · vanity mirror${(bath.vanity?.count || 0) > 1 ? 's' : ''}</h3>
-      <span class="card-meta">Wall ${escapeHtml(wallWStr)} · ${bath.vanity?.count || 1} sink${(bath.vanity?.count || 1) > 1 ? 's' : ''}</span>
-    </div>
-    <div class="grid grid-2" style="margin-top: 6px;">
-      <div class="field">
-        <label class="field-lbl">Mirror height</label>
-        <select class="field-select" data-mh>
-          ${MIRROR_HEIGHTS.map(h => `<option ${mc.mirrorHeight === h ? 'selected' : ''}>${escapeHtml(h)}</option>`).join('')}
-        </select>
-      </div>
-      ${mc.mirrorHeight === 'Custom' ? `
-        <div class="field">
-          <label class="field-lbl">Custom height</label>
-          <input class="field-input" type="text" data-mhc placeholder='e.g. 36"' value="${escapeHtml(mc.customMirrorHeight || '')}" />
-        </div>
-      ` : '<div></div>'}
-    </div>
+  // If the plan gave exact mirror sizes, show those (don't recalculate from wall width).
+  const planPieces = (bath.mirror && Array.isArray(bath.mirror.pieces) && bath.mirror.pieces.length) ? bath.mirror.pieces : null;
+  const styleSel = `
     <div class="field" style="margin-top:10px;">
       <label class="field-lbl">Mirror style</label>
       <select class="field-select" data-framed>
         <option value="no" ${!mc.framed ? 'selected' : ''}>Unframed · polished edge + standoffs</option>
         <option value="yes" ${mc.framed ? 'selected' : ''}>Framed · adds frame line</option>
       </select>
-    </div>
-    ${!wallW ? `
-      <div style="margin-top: 12px; padding: 10px 12px; background: rgba(184,116,43,0.08); border: 1px solid rgba(184,116,43,0.3); border-radius: 4px; font-size: 13px; color: var(--warning);">
-        Vanity wall width missing. Fill it in on the review step or measure on site.
-      </div>` : ''}
-    ${calc.options.length ? `
-      <div class="mirror-options">
-        ${calc.options.map(o => {
-          const isActive = mc.selectedOption === o.id;
-          const isRec = calc.recommendedId === o.id;
-          // Build a tiny visualizer
-          const wallPct = 100;
-          const margins = (() => {
-            if (!wallW) return [];
-            if (o.count === 1) {
-              return [{ leftPct: 3 / wallW * 100, widthPct: o.eachWidth / wallW * 100 }];
-            }
-            // Two: 3 + W + 3 + 3 + W + 3
-            return [
-              { leftPct: 3 / wallW * 100, widthPct: o.eachWidth / wallW * 100 },
-              { leftPct: (3 + o.eachWidth + 6) / wallW * 100, widthPct: o.eachWidth / wallW * 100 },
-            ];
-          })();
-          return `
-            <div class="mirror-opt ${isActive ? 'is-active' : ''}" data-opt="${escapeHtml(o.id)}">
-              <div class="mirror-opt-h">
-                <div class="ttl">${escapeHtml(o.label)}</div>
-                ${isRec ? '<span class="rec">Recommended</span>' : ''}
-              </div>
-              <div class="dims">${o.count} × ${formatFraction(o.eachWidth)}" W × ${formatFraction(o.eachHeight)}" H</div>
-              <div class="pos">${escapeHtml(o.position)}</div>
-              <div class="mirror-opt-viz">
-                ${margins.map(m => `<div class="m" style="left:${m.leftPct}%;width:${m.widthPct}%"></div>`).join('')}
-                <div class="wall-label">wall ${escapeHtml(wallWStr)}</div>
-              </div>
-            </div>`;
-        }).join('')}
-      </div>
-      <div class="muted" style="margin-top: 12px; font-size: 12px;">
-        Both options will appear on the proposal. Selected = primary recommendation in SG entry.
-      </div>
-    ` : ''}
-  `;
+    </div>`;
+  let body;
+  if (planPieces) {
+    body = `
+      <div style="margin-top:8px;padding:12px;background:rgba(45,99,168,0.06);border:1px solid rgba(45,99,168,0.28);border-radius:6px;">
+        <div class="field-lbl" style="margin-bottom:8px;">Mirror sizes from the plan <span style="color:var(--muted);font-weight:400;">— used as-is, not recalculated</span></div>
+        ${planPieces.map(p => `<div style="display:flex;justify-content:space-between;font-size:14px;padding:4px 0;"><strong>${p.count > 1 ? p.count + '× ' : ''}${escapeHtml((p.widthIn != null && p.heightIn != null) ? formatFraction(p.widthIn) + '" × ' + formatFraction(p.heightIn) + '"' : (p.value || ''))}</strong><span style="color:var(--muted);">${escapeHtml(p.shape || '')}</span></div>`).join('')}
+      </div>` + styleSel;
+  } else {
+    const heightGrid = `
+      <div class="grid grid-2" style="margin-top: 6px;">
+        <div class="field"><label class="field-lbl">Mirror height</label>
+          <select class="field-select" data-mh>${MIRROR_HEIGHTS.map(h => `<option ${mc.mirrorHeight === h ? 'selected' : ''}>${escapeHtml(h)}</option>`).join('')}</select></div>
+        ${mc.mirrorHeight === 'Custom' ? `<div class="field"><label class="field-lbl">Custom height</label><input class="field-input" type="text" data-mhc placeholder='e.g. 36"' value="${escapeHtml(mc.customMirrorHeight || '')}" /></div>` : '<div></div>'}
+      </div>`;
+    const warn = !wallW ? `<div style="margin-top: 12px; padding: 10px 12px; background: rgba(184,116,43,0.08); border: 1px solid rgba(184,116,43,0.3); border-radius: 4px; font-size: 13px; color: var(--warning);">Vanity wall width missing. Fill it in on the review step or measure on site.</div>` : '';
+    const opts = calc.options.length ? `<div class="mirror-options">${calc.options.map(o => {
+      const isActive = mc.selectedOption === o.id; const isRec = calc.recommendedId === o.id;
+      const margins = (!wallW) ? [] : (o.count === 1
+        ? [{ leftPct: 3 / wallW * 100, widthPct: o.eachWidth / wallW * 100 }]
+        : [{ leftPct: 3 / wallW * 100, widthPct: o.eachWidth / wallW * 100 }, { leftPct: (3 + o.eachWidth + 6) / wallW * 100, widthPct: o.eachWidth / wallW * 100 }]);
+      return `<div class="mirror-opt ${isActive ? 'is-active' : ''}" data-opt="${escapeHtml(o.id)}"><div class="mirror-opt-h"><div class="ttl">${escapeHtml(o.label)}</div>${isRec ? '<span class="rec">Recommended</span>' : ''}</div><div class="dims">${o.count} × ${formatFraction(o.eachWidth)}" W × ${formatFraction(o.eachHeight)}" H</div><div class="pos">${escapeHtml(o.position)}</div><div class="mirror-opt-viz">${margins.map(m => `<div class="m" style="left:${m.leftPct}%;width:${m.widthPct}%"></div>`).join('')}<div class="wall-label">wall ${escapeHtml(wallWStr)}</div></div></div>`;
+    }).join('')}</div><div class="muted" style="margin-top: 12px; font-size: 12px;">Both options will appear on the proposal. Selected = primary recommendation in SG entry.</div>` : '';
+    body = heightGrid + styleSel + warn + opts;
+  }
+  c.innerHTML = `
+    <div class="card-h">
+      <h3 class="card-title">${escapeHtml(bath.name)} · vanity mirror${(bath.vanity?.count || 0) > 1 ? 's' : ''}</h3>
+      <span class="card-meta">Wall ${escapeHtml(wallWStr)} · ${bath.vanity?.count || 1} sink${(bath.vanity?.count || 1) > 1 ? 's' : ''}</span>
+    </div>` + body;
 
   // Wire mirror height
   c.querySelector('[data-mh]')?.addEventListener('change', e => {
