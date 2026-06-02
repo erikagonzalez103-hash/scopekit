@@ -8210,49 +8210,59 @@ async function openMeasureTool() {
   try { if (pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; } catch (e) {}
 
   const back = document.createElement('div');
-  back.style.cssText = 'position:fixed;inset:0;background:rgba(20,28,38,0.78);z-index:9999;display:flex;flex-direction:column;';
+  back.style.cssText = 'position:fixed;inset:0;background:rgba(20,28,38,0.82);z-index:9999;display:flex;flex-direction:column;';
+  const sel = 'font-size:13px;padding:5px 8px;border:1px solid #c9d2db;border-radius:6px;background:#fff;color:#1d2733;'; // white dropdown — readable
+  const fileCtl = pdfFiles.length > 1
+    ? `<select id="mt-file" style="${sel}">${pdfFiles.map((f, i) => `<option value="${i}">${escapeHtml(f.name)}</option>`).join('')}</select>`
+    : `<span style="font-size:12px;opacity:.75;">${escapeHtml(pdfFiles[0].name)}</span>`;
   back.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#1d2733;color:#fff;flex-wrap:wrap;">
-      <strong style="font-size:14px;">Measure on plan</strong>
-      <select id="mt-file" style="font-size:12px;padding:4px 6px;">${pdfFiles.map((f, i) => `<option value="${i}">${escapeHtml(f.name)}</option>`).join('')}</select>
-      <span style="display:inline-flex;align-items:center;gap:4px;"><button id="mt-prev" class="btn ghost sm">‹</button><span id="mt-page" style="font-size:12px;min-width:78px;text-align:center;">Page 1</span><button id="mt-next" class="btn ghost sm">›</button></span>
-      <span style="display:inline-flex;align-items:center;gap:4px;"><button id="mt-zoomout" class="btn ghost sm">–</button><span id="mt-zoom" style="font-size:12px;width:44px;text-align:center;">100%</span><button id="mt-zoomin" class="btn ghost sm">+</button></span>
+      <strong style="font-size:15px;">Measure on plan</strong>
+      ${fileCtl}
+      <span style="display:inline-flex;align-items:center;gap:6px;"><button id="mt-prev" class="btn ghost sm">‹ Prev</button><span id="mt-page" style="font-size:12px;min-width:74px;text-align:center;">Page 1</span><button id="mt-next" class="btn ghost sm">Next ›</button></span>
+      <span style="display:inline-flex;align-items:center;gap:6px;">Zoom <button id="mt-zoomout" class="btn ghost sm">–</button><span id="mt-zoom" style="font-size:12px;width:42px;text-align:center;">100%</span><button id="mt-zoomin" class="btn ghost sm">+</button></span>
       <span style="flex:1;"></span>
       <button id="mt-close" class="btn ghost sm">Close ✕</button>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;background:#28323e;color:#fff;flex-wrap:wrap;font-size:12px;">
-      <strong>Scale:</strong> <span id="mt-scale-state" style="color:#ffd98a;">not set</span>
-      <button id="mt-calibrate" class="btn ghost sm">Calibrate on a known dim</button>
-      <span>or</span>
-      <select id="mt-ratio" style="font-size:12px;padding:4px 6px;"><option value="">pick plan scale…</option>${Object.keys(SCALE_MULTIPLIERS).map(k => `<option value="${k}">${escapeHtml(k)}</option>`).join('')}</select>
-      <span style="flex:1;"></span>
-      <strong>Length:</strong> <span id="mt-result" style="font-family:var(--mono,monospace);color:#9fe6ff;">— click two points —</span>
-      <button id="mt-use" class="btn sm" style="display:none;">Use → field</button>
-      <button id="mt-copy" class="btn ghost sm" style="display:none;">Copy</button>
-      <button id="mt-clear" class="btn ghost sm">Clear</button>
-    </div>
+    <div id="mt-banner" style="padding:13px 16px;color:#fff;font-size:15px;font-weight:600;text-align:center;line-height:1.4;"></div>
     <div id="mt-stage" style="flex:1;overflow:auto;background:#0e141b;display:flex;justify-content:center;align-items:flex-start;padding:16px;">
       <div style="position:relative;line-height:0;"><canvas id="mt-base"></canvas><canvas id="mt-overlay" style="position:absolute;left:0;top:0;cursor:crosshair;"></canvas></div>
     </div>
-    <div style="padding:6px 16px;background:#28323e;color:#9fd9b5;font-size:11px;">Set the scale first (calibrate on a printed dimension, or pick the plan's scale), then click the two ends of a wall. To drop a result into a field: click that field on the review screen, open this tool, measure, then press “Use → field”.</div>`;
+    <div style="padding:12px 16px;background:#28323e;color:#fff;display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+      <div><span style="font-size:12px;opacity:.7;">Scale&nbsp;</span><span id="mt-scale" style="font-weight:600;color:#ffd98a;">not set</span></div>
+      <div><span style="font-size:12px;opacity:.7;">Length&nbsp;</span><strong id="mt-result" style="font-family:var(--mono,monospace);font-size:18px;color:#9fe6ff;">—</strong></div>
+      <span style="flex:1;"></span>
+      <button id="mt-use" class="btn sm" style="display:none;">Use this →</button>
+      <button id="mt-setscale" class="btn ghost sm">Set scale again</button>
+      <button id="mt-clear" class="btn ghost sm">Clear points</button>
+    </div>`;
   document.body.appendChild(back);
 
-  const $m = (sel) => back.querySelector(sel);
+  const $m = (s) => back.querySelector(s);
   const baseCanvas = $m('#mt-base'), overlay = $m('#mt-overlay');
   const bctx = baseCanvas.getContext('2d'), octx = overlay.getContext('2d');
-  let pdf = null, pageNum = 1, numPages = 1, zoom = 1, renderScale = 1, multiplier = null, mode = 'measure', pts = [];
+  let pdf = null, pageNum = 1, numPages = 1, zoom = 1, renderScale = 1, multiplier = null, mode = 'calibrate', pts = [];
 
-  const setScale = (t) => { $m('#mt-scale-state').textContent = t; };
   const realFromPx = (d) => pixelsToRealInches(d, { scaleMultiplier: multiplier, pxPerPaperInch: 72 * renderScale });
-  const fmt = (inches) => { const ft = Math.floor(inches / 12); const r = Math.round((inches - ft * 12) * 8) / 8; return (ft ? ft + "'-" : '') + (formatSgFraction ? formatSgFraction(r) : r) + '" (' + (Math.round(inches * 8) / 8) + '")'; };
+  const fmt = (inches) => { const ft = Math.floor(inches / 12); const r = Math.round((inches - ft * 12) * 8) / 8; return (ft ? ft + "'-" : '') + (formatSgFraction ? formatSgFraction(r) : r) + '"'; };
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const canvasPt = (e) => { const r = overlay.getBoundingClientRect(); return { x: (e.clientX - r.left) * (overlay.width / r.width), y: (e.clientY - r.top) * (overlay.height / r.height) }; };
 
+  function updateBanner() {
+    const b = $m('#mt-banner');
+    if (multiplier == null || mode === 'calibrate') {
+      b.style.background = '#b8742b';
+      b.innerHTML = 'STEP 1 · Set the scale — click the two ends of a measurement you already know on the plan (like a wall marked 5\'-0"). Then type how long it really is.';
+    } else {
+      b.style.background = '#2563a8';
+      b.innerHTML = 'STEP 2 · Measure — click the two ends of anything to get its real size. To drop it into a field: click that field on the review screen first, then “Use this →”.';
+    }
+  }
   function drawOverlay() {
     octx.clearRect(0, 0, overlay.width, overlay.height);
     const col = mode === 'calibrate' ? '#ffcf6b' : '#4fd1ff';
-    octx.fillStyle = col; octx.strokeStyle = col; octx.lineWidth = 2;
-    pts.forEach(p => { octx.beginPath(); octx.arc(p.x, p.y, 4, 0, 7); octx.fill(); });
+    octx.fillStyle = col; octx.strokeStyle = col; octx.lineWidth = 2.5;
+    pts.forEach(p => { octx.beginPath(); octx.arc(p.x, p.y, 5, 0, 7); octx.fill(); });
     if (pts.length === 2) { octx.beginPath(); octx.moveTo(pts[0].x, pts[0].y); octx.lineTo(pts[1].x, pts[1].y); octx.stroke(); }
   }
   async function renderPage() {
@@ -8273,6 +8283,7 @@ async function openMeasureTool() {
     pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     numPages = pdf.numPages; pageNum = 1; await renderPage();
   }
+  const startCalibrate = () => { mode = 'calibrate'; pts = []; drawOverlay(); updateBanner(); };
 
   overlay.addEventListener('click', (e) => {
     if (pts.length >= 2) pts = [];
@@ -8280,40 +8291,46 @@ async function openMeasureTool() {
     if (pts.length !== 2) return;
     const d = dist(pts[0], pts[1]);
     if (mode === 'calibrate') {
-      const known = prompt('Real length of this dimension? (e.g. 60, 5\', 2\'-10")');
+      const known = prompt('How long is this in real life?  (e.g. 60  or  5\'  or  2\'-10")');
       const inches = (known != null && known !== '') ? toInches(known) : null;
-      if (inches) { multiplier = inches / (d / (72 * renderScale)); setScale('calibrated · 1 paper-in ≈ ' + Math.round(multiplier) + '"'); mode = 'measure'; $m('#mt-calibrate').textContent = 'Re-calibrate'; }
+      if (inches) {
+        multiplier = inches / (d / (72 * renderScale));
+        mode = 'measure';
+        $m('#mt-scale').textContent = 'set ✓';
+        $m('#mt-result').textContent = '—'; $m('#mt-use').style.display = 'none';
+        updateBanner();
+      }
       pts = []; drawOverlay(); return;
     }
     const real = realFromPx(d);
-    if (real == null) { $m('#mt-result').textContent = 'set a scale first'; return; }
+    if (real == null) { startCalibrate(); return; }
     const inches = Math.round(real * 8) / 8;
     $m('#mt-result').textContent = fmt(inches);
     $m('#mt-result').dataset.inches = inches;
-    $m('#mt-use').style.display = ''; $m('#mt-copy').style.display = '';
+    $m('#mt-use').style.display = '';
   });
 
-  $m('#mt-calibrate').addEventListener('click', () => { mode = 'calibrate'; pts = []; drawOverlay(); setScale('calibrating — click the two ends of a known dimension'); });
-  $m('#mt-ratio').addEventListener('change', (e) => { const k = e.target.value; if (k && SCALE_MULTIPLIERS[k]) { multiplier = SCALE_MULTIPLIERS[k]; mode = 'measure'; setScale(k + ' (' + multiplier + '× per paper-in)'); } });
+  $m('#mt-setscale').addEventListener('click', startCalibrate);
   $m('#mt-prev').addEventListener('click', async () => { if (pageNum > 1) { pageNum--; await renderPage(); } });
   $m('#mt-next').addEventListener('click', async () => { if (pageNum < numPages) { pageNum++; await renderPage(); } });
   $m('#mt-zoomin').addEventListener('click', async () => { zoom = Math.min(4, zoom + 0.25); await renderPage(); });
   $m('#mt-zoomout').addEventListener('click', async () => { zoom = Math.max(0.5, zoom - 0.25); await renderPage(); });
-  $m('#mt-file').addEventListener('change', async (e) => { await loadFile(parseInt(e.target.value, 10)); });
-  $m('#mt-clear').addEventListener('click', () => { pts = []; drawOverlay(); $m('#mt-result').textContent = '— click two points —'; $m('#mt-use').style.display = 'none'; $m('#mt-copy').style.display = 'none'; });
-  $m('#mt-copy').addEventListener('click', () => { const v = $m('#mt-result').dataset.inches; if (v && navigator.clipboard) navigator.clipboard.writeText(v + '"').catch(() => {}); });
+  if ($m('#mt-file')) $m('#mt-file').addEventListener('change', async (e) => { await loadFile(parseInt(e.target.value, 10)); });
+  $m('#mt-clear').addEventListener('click', () => { pts = []; drawOverlay(); $m('#mt-result').textContent = '—'; $m('#mt-use').style.display = 'none'; });
   $m('#mt-use').addEventListener('click', () => {
     const v = $m('#mt-result').dataset.inches; const f = window.__skLastField;
     if (!v) return;
-    if (!f) { alert('First click into a field on the review screen (e.g. Vanity wall width), then open this tool and press Use.'); return; }
+    if (!f) { alert('First click into the field you want to fill on the review screen (e.g. Vanity wall width), then come back and press “Use this →”.'); return; }
     if (f.dataset.field === 'shower.dims') { const cur = (f.value || '').trim(); f.value = (cur && !/[×x]/.test(cur)) ? cur + ' × ' + v + '"' : v + '"'; }
     else { f.value = v + '"'; }
     f.dispatchEvent(new Event('input', { bubbles: true }));
+    $m('#mt-use').textContent = 'Filled ✓'; setTimeout(() => { $m('#mt-use').textContent = 'Use this →'; }, 900);
   });
   $m('#mt-close').addEventListener('click', () => back.remove());
   back.addEventListener('click', (e) => { if (e.target === back) back.remove(); });
 
-  try { await loadFile(0); } catch (err) { setScale('failed to load PDF: ' + (err.message || err)); }
+  updateBanner();
+  try { await loadFile(0); } catch (err) { $m('#mt-scale').textContent = 'failed to load PDF: ' + (err.message || err); }
 }
 
 // =============== OUTPUT SCREEN ===============
