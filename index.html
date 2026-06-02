@@ -4649,7 +4649,16 @@ async function runExtraction() {
       if (API_CONFIG.workerUrl) {
         // Vision pipeline available: it builds the detailed skeleton; the text
         // layer corrects mirror sizes and backfills any bath vision missed.
-        extractionResult = await extractViaWorker();
+        // If vision fails (e.g. truncated/malformed JSON on a big plan), DON'T fall
+        // back to mock — the text layer is the reliable source, so seed from it.
+        try {
+          extractionResult = await extractViaWorker();
+        } catch (visErr) {
+          console.warn('[ScopeKit] Vision extraction failed — using text-layer baths instead:', visErr);
+          extractionResult = tlBaths.length
+            ? { bathrooms: bathroomSkeletonFromTextLayer(tlBaths), otherItems: [], scaleStatus: null }
+            : mockExtraction();
+        }
         if (textLayerData) {
           extractionResult = await overrideMirrorsFromTextLayer(extractionResult, textLayerData, state.notesDirectives);
         }
