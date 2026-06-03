@@ -2236,6 +2236,7 @@ const MIRROR_HEIGHTS = ['40"', '42"', 'Custom'];
 const SHOWER_LAYOUTS = [
   // --- Shower applications ---
   { id: 'inline-2', label: '2-panel inline · swing door + fixed over pony wall', app: 'shower', door: 'swing' },
+  { id: 'inline-2-no-pony', label: '2-panel inline · swing door + fixed (no pony, full height)', app: 'shower', door: 'swing' },
   { id: 'enclosure-3', label: '3-sided enclosure · door on open side', app: 'shower', door: 'swing' },
   { id: 'corner', label: 'Corner · 2 walls, door on one open side', app: 'shower', door: 'swing' },
   { id: 'neo', label: 'Neo-angle', app: 'shower', door: 'swing' },
@@ -2656,6 +2657,28 @@ const BOM_TEMPLATES = {
     glassOnly: true, app: 'tub', door: 'pivot', tubDeck: 18,
     title: (b) => `Supply and Install ${b.name} Tub Glass`,
     panels: (bath, cfg) => singlePanel(bath, cfg, 'Pivot door', { w: 60 }),
+  },
+  // 2-panel inline with NO pony — a full-height fixed panel + a swing door in an
+  // alcove. Width from the plan opening; the door is a set width (cfg.doorWidth,
+  // default 24"), the fixed panel takes the rest. Deductions mirror inline-2:
+  // door = doorWidth − 1/2", fixed = (opening − doorWidth) − 1/8". (Confirm the
+  // door width per job — Bath 2 alcove example.)
+  'inline-2-no-pony': {
+    glassOnly: true, app: 'shower', door: 'swing',
+    title: (b) => `Supply and Install ${/master|primary/i.test(b.name) ? 'Primary ' : ''}Shower Glass`,
+    panels: (bath, cfg) => {
+      const { W, H } = parseOpeningWH(bath, cfg);
+      if (W == null || H == null) return [];
+      const doorW = (cfg && cfg.doorWidth) ? (toInches(cfg.doorWidth) || 24) : 24;
+      const label = glassLabel(cfg);
+      const door = { role: 'Door panel', label, w: Math.max(1, doorW - 0.5), h: H, edges: 'Flat Polish all 4', cutouts: [] };
+      const fixedW = (W - doorW) - 0.125;
+      if (fixedW <= 0) return [door];
+      return [
+        { role: 'Fixed panel', label, w: fixedW, h: H, edges: 'Flat Polish all 4', cutouts: [] },
+        door,
+      ];
+    },
   },
   // Single fixed panel sitting on a pony/knee wall, no door. A tall fixed panel has
   // nothing (door frame/header) to carry its weight, so it runs to the ceiling for
@@ -7568,6 +7591,10 @@ function renderBathCard(bath) {
     `<span class="flag ${f.kind === 'attn' ? 'attn' : ''}">${escapeHtml(f.text)}</span>`).join('');
 
   const hasShower = bath.shower?.type?.value && !/none|tbd|—/i.test(bath.shower.type.value);
+  const layoutConfirmed = !!(bath.shower?.walls?.layout && bath.shower?.walls?.mode === 'manual');
+  // Ask for the glass configuration on EVERY shower bath (not just the ones the
+  // extractor flagged), so it's consistent across baths.
+  const showWallsPicker = hasShower;
   const wallsAmbiguous = hasShower && bath.shower?.walls?.ambiguous;
 
   c.innerHTML = `
@@ -7582,17 +7609,17 @@ function renderBathCard(bath) {
     </div>
     <div class="bath-body">
       ${flagHtml ? `<div style="margin-bottom: 10px;">${flagHtml}</div>` : ''}
-      ${wallsAmbiguous ? `
+      ${showWallsPicker ? `
         <div class="walls-prompt" data-bath="${escapeHtml(bath.id)}">
           <div class="walls-prompt-h">
-            <span class="conf low">LOW · WALLS</span>
-            <strong>Confirm shower wall configuration</strong>
+            <span class="conf ${layoutConfirmed ? 'high' : (wallsAmbiguous ? 'low' : 'med')}">${layoutConfirmed ? 'HIGH · MANUAL' : (wallsAmbiguous ? 'LOW · WALLS' : 'PICK ONE')}</span>
+            <strong>${layoutConfirmed ? 'Shower glass configuration' : 'Choose the shower glass configuration'}</strong>
           </div>
-          <div class="walls-prompt-body">${escapeHtml(bath.shower.walls.hint || '')}</div>
+          ${bath.shower?.walls?.hint ? `<div class="walls-prompt-body">${escapeHtml(bath.shower.walls.hint)}</div>` : ''}
           <div class="walls-prompt-opts">
             ${SHOWER_LAYOUTS.map(l => `
               <label class="walls-opt">
-                <input type="radio" name="walls-${escapeHtml(bath.id)}" value="${escapeHtml(l.id)}" ${bath.shower.walls.layout === l.id ? 'checked' : ''} />
+                <input type="radio" name="walls-${escapeHtml(bath.id)}" value="${escapeHtml(l.id)}" ${bath.shower?.walls?.layout === l.id ? 'checked' : ''} />
                 <span>${escapeHtml(l.label)}</span>
               </label>`).join('')}
           </div>
@@ -7686,6 +7713,8 @@ function renderBathCard(bath) {
   // Wire walls radio
   c.querySelectorAll(`input[name="walls-${bath.id}"]`).forEach(r => {
     r.addEventListener('change', () => {
+      bath.shower = bath.shower || {};
+      bath.shower.walls = bath.shower.walls || {};
       bath.shower.walls.layout = r.value;
       bath.shower.walls.conf = 'high';
       bath.shower.walls.mode = 'manual';
@@ -7693,11 +7722,11 @@ function renderBathCard(bath) {
       // Update prompt header chip
       const hdr = c.querySelector('.walls-prompt-h .conf');
       if (hdr) {
-        hdr.classList.remove('low'); hdr.classList.add('high');
+        hdr.classList.remove('low', 'med'); hdr.classList.add('high');
         hdr.textContent = 'HIGH · MANUAL';
       }
       const head = c.querySelector('.walls-prompt-h strong');
-      if (head) head.textContent = 'Wall configuration confirmed';
+      if (head) head.textContent = 'Shower glass configuration';
     });
   });
   // Wire confidence badges → click cycles HIGH/MED/LOW (manual mode)
@@ -7818,6 +7847,8 @@ function renderConfigCard(bath) {
   const boxSpec = { 'box-3': { count: 3, ponyCount: 0 }, 'box-3-pony': { count: 3, ponyCount: 2 }, 'box-4-2pony': { count: 4, ponyCount: 3 } }[layoutId];
   const isPanelOverPony = layoutId === 'inline-pony';
   if (isPanelOverPony && !cfg.ponyHeight) cfg.ponyHeight = '42"'; // standard pony/knee wall
+  const isNoPonyInline = layoutId === 'inline-2-no-pony';
+  if (isNoPonyInline && !cfg.doorWidth) cfg.doorWidth = '24"'; // default swing-door width
   const c = el('div', 'card marked');
   c.innerHTML = `
     <div class="card-h">
@@ -7891,6 +7922,16 @@ function renderConfigCard(bath) {
           <input class="field-input" style="max-width:120px;" type="text" data-measure-target data-cfg="ponyHeight" value="${escapeHtml(cfg.ponyHeight || '42"')}" placeholder='e.g. 42"' />
         </div>
         <div style="font-size:12px;color:var(--muted);margin-top:8px;">Panel width comes from the shower dims; height = ceiling (${escapeHtml(bath.ceiling?.value || '—')}) − pony height. The glass runs to the ceiling for support.</div>
+      </div>
+    ` : ''}
+    ${isNoPonyInline ? `
+      <div class="field" style="margin-top:14px;border-top:1px solid var(--hairline);padding-top:12px;">
+        <label class="field-lbl">2-panel inline (no pony) — full-height door + fixed</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--muted);min-width:120px;">Door width</span>
+          <input class="field-input" style="max-width:120px;" type="text" data-measure-target data-cfg="doorWidth" value="${escapeHtml(cfg.doorWidth || '24"')}" placeholder='e.g. 24"' />
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;">Opening comes from the shower dims. Door = door width − ½"; fixed panel = (opening − door width) − ⅛". Both full glass height. Adjust the door width to match the job.</div>
       </div>
     ` : ''}
   `;
