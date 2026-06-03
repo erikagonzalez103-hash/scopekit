@@ -2354,8 +2354,13 @@ const RENDER_PROFILES = {
 // Helper: pull the shower-width inches from "72\" × 42\""
 function parseShowerWidth(bath) {
   const v = String(bath?.shower?.dims?.value || '');
+  // Prefer an explicit W×H ("60 x 90") — the first number is the width.
   const m = v.match(/(\d+(?:\.\d+)?)\s*["']?\s*[×x]\s*(\d+(?:\.\d+)?)/);
-  return m ? parseFloat(m[1]) : null;
+  if (m) return parseFloat(m[1]);
+  // Otherwise a single-value dims field IS the opening width — e.g. "60\"", or
+  // "5'-0\"". Use toInches so feet-inch entries convert correctly.
+  if (v.trim()) { const inches = toInches(v.trim()); if (inches) return inches; }
+  return null;
 }
 
 // Helper: parse a pony-wall length from a features list. Looks for "X'-Y\" pony" or "N\" pony" or "pony X'-Y\"".
@@ -3686,6 +3691,77 @@ function findMirrorLabels(textLayers) {
   return out;
 }
 
+// Find SHOWER labels in the text layer — e.g. "Recessed Shower", "Recessed Tiled
+// Shower", "Walk-in Shower", "Tiled Shower". Returns positioned hits so they can be
+// associated to the nearest bath, like mirrors. Tub / tub-shower phrasing is
+// excluded here (those are not auto-flagged as glass showers).
+// Returns: [{ pageNum, raw, term, x, y, pageW, pageH }]
+function findShowerLabels(textLayers) {
+  if (!textLayers) return [];
+  const found = [];
+  // Longest / most specific phrases first so they win the match.
+  const SHOWER_RE = /(recessed\s+tiled\s+shower|recessed\s+shower|curbless\s+(?:walk[\s-]?in\s+)?shower|walk[\s-]?in\s+shower|tiled\s+shower|glass\s+shower|shower\s+enclosure|\bshower\b)/i;
+  // Tub / combo phrasing — do NOT auto-set a glass shower from these.
+  const TUB_RE = /tub\s*\/\s*shower|shower\s*\/\s*tub|f\/?\s*g\s+tub|\btub\b/i;
+  // Don't pull "shower" out of schedule/legend headings.
+  const HEADING_RE = /\b(?:schedule|legend|keynotes?|general\s+notes?|index)\b/i;
+  for (const page of textLayers) {
+    const pageW = page.viewport?.width || 0;
+    const pageH = page.viewport?.height || 0;
+    const runs = assembleTextRuns(page.items);
+    for (const run of runs) {
+      const s = run.str || '';
+      if (TUB_RE.test(s) || HEADING_RE.test(s)) continue;
+      const m = s.match(SHOWER_RE);
+      if (!m) continue;
+      found.push({
+        pageNum: page.pageNum,
+        raw: s.trim(),
+        term: m[1].replace(/\s+/g, ' ').toLowerCase(),
+        x: run.x, y: run.y, pageW, pageH,
+      });
+    }
+  }
+  return found;
+}
+
+// Map a detected shower phrase to a friendly shower-type label for the review card.
+function showerTypeLabelFromTerm(term) {
+  const t = (term || '').toLowerCase();
+  if (/recessed/.test(t)) return 'Recessed walk-in shower';
+  if (/curbless/.test(t)) return 'Curbless walk-in shower';
+  if (/walk[\s-]?in/.test(t)) return 'Walk-in shower';
+  if (/enclosure/.test(t)) return 'Shower enclosure';
+  return 'Shower enclosure';
+}
+
+// Bind each shower label to the nearest bath instance on the SAME sheet. Returns
+// { bathKey: { term, raw, dist } }, preferring the most specific term, then closest.
+function associateShowersToBaths(showerLabels, uniqueBaths) {
+  const out = {};
+  for (const s of (showerLabels || [])) {
+    let best = null;
+    for (const u of (uniqueBaths || [])) {
+      for (const inst of (u.instances || [])) {
+        if (inst.page !== s.pageNum) continue;
+        if ((inst.sheet || null) !== (s.sourceFile || null)) continue;
+        const dx = Math.abs(inst.x - s.x), dy = Math.abs(inst.y - s.y);
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (!best || dist < best.dist) best = { key: u.key, dist };
+      }
+    }
+    if (!best) continue;
+    const diag = (s.pageW && s.pageH) ? Math.sqrt(s.pageW * s.pageW + s.pageH * s.pageH) : 0;
+    if (diag && best.dist > diag * 0.5) continue; // implausibly far
+    const prev = out[best.key];
+    if (!prev || s.term.length > prev.term.length ||
+        (s.term.length === prev.term.length && best.dist < prev.dist)) {
+      out[best.key] = { term: s.term, raw: s.raw, dist: best.dist };
+    }
+  }
+  return out;
+}
+
 // Find room labels — looks for bath-related room names anywhere in lines/items.
 // Returns: [{ pageNum, name, x, y }]
 // Uses substring (not full-line) matching because plan labels often appear
@@ -3927,10 +4003,12 @@ function bathroomSkeletonFromTextLayer(uniqueBaths) {
     name: u.name,
     ceiling: { value: 'TBD', conf: 'low', mode: 'auto' },
     shower: {
-      type: { value: '— TBD —', conf: 'low', mode: 'auto' },
+      type: u.showerTerm
+        ? { value: showerTypeLabelFromTerm(u.showerTerm), conf: 'med', mode: 'auto' }
+        : { value: '— TBD —', conf: 'low', mode: 'auto' },
       dims: { value: 'TBD', conf: 'low', mode: 'auto' },
       features: [],
-      walls: null,
+      walls: u.showerTerm ? {} : null,
     },
     vanity: {
       count: 0,
@@ -4212,10 +4290,14 @@ async function runTextLayerExtraction(files) {
       const mirrors = findMirrorLabels(pages);
       const rooms = findRoomLabelsTL(pages);
       const dims = findDimensionLabels(pages);
+      const showers = findShowerLabels(pages);
       // Tag with source file for provenance
       mirrors.forEach(m => m.sourceFile = file.name);
       rooms.forEach(r => r.sourceFile = file.name);
       dims.forEach(d => d.sourceFile = file.name);
+      showers.forEach(s => s.sourceFile = file.name);
+      result.showers = result.showers || [];
+      result.showers.push(...showers);
       result.mirrors.push(...mirrors);
       result.rooms.push(...rooms);
       result.dimensions = result.dimensions || [];
@@ -4237,6 +4319,16 @@ async function runTextLayerExtraction(files) {
   // config UI can offer them as quick-fill.
   result.dimsByBath = associateDimsToBaths(result.dimensions, bathRooms);
   result.uniqueBaths.forEach(u => { u.planDims = (result.dimsByBath[u.key] || {}).dims || []; });
+
+  // Auto-detect showers: bind shower labels ("Recessed Shower", "Walk-in Shower",
+  // etc.) to the nearest bath so the review card pre-fills a shower type and shows
+  // the glass-config picker + Shower dims field automatically.
+  result.showers = result.showers || [];
+  const showerByBath = associateShowersToBaths(result.showers, result.uniqueBaths);
+  result.uniqueBaths.forEach(u => {
+    const sh = showerByBath[u.key];
+    if (sh) { u.showerTerm = sh.term; u.showerRaw = sh.raw; }
+  });
 
   // Debug: log per-page findings so we can diagnose quickly
   const perPage = {};
@@ -7623,7 +7715,12 @@ function renderBathCard(bath) {
                 <span>${escapeHtml(l.label)}</span>
               </label>`).join('')}
           </div>
-        </div>` : ''}
+        </div>` : `
+        <div class="walls-prompt" data-bath="${escapeHtml(bath.id)}" style="border-style:dashed;">
+          <div class="walls-prompt-h"><strong>Does this bath have a glass shower?</strong></div>
+          <div class="walls-prompt-body">The plan didn't flag one here. Add it to get the glass-configuration picker and a shower-size field.</div>
+          <div style="margin-top:8px;"><button type="button" class="btn ghost sm" data-addshower="1">+ This bath has a glass shower</button></div>
+        </div>`}
       ${bathField('Ceiling height', bath.ceiling, 'ceiling')}
       ${hasShower ? `
         ${bathField('Shower type', bath.shower?.type, 'shower.type')}
@@ -7654,6 +7751,17 @@ function renderBathCard(bath) {
   `;
   // Launch the interactive measure tool from this bath card.
   c.querySelector('[data-measure]')?.addEventListener('click', () => openMeasureTool());
+
+  // Manually mark a bath as having a glass shower when the extractor missed it.
+  // Sets a shower type so hasShower becomes true on re-render, which reveals the
+  // glass-config picker and the Shower dims field.
+  c.querySelector('[data-addshower]')?.addEventListener('click', () => {
+    bath.shower = bath.shower || {};
+    bath.shower.type = { value: 'Shower enclosure', conf: 'high', mode: 'manual' };
+    bath.shower.dims = bath.shower.dims || { value: '', conf: 'low', mode: 'manual' };
+    bath.shower.walls = bath.shower.walls || {};
+    renderReview();
+  });
 
   // "From plan" quick-fill chips: clicking a chip drops the dimension into the
   // last-focused field. For the shower-dims field it builds "W × H" across two
