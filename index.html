@@ -8265,12 +8265,19 @@ async function openMeasureTool() {
   try { if (pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; } catch (e) {}
 
   const back = document.createElement('div');
+  back.className = 'mt-modal';
   back.style.cssText = 'position:fixed;inset:0;background:rgba(20,28,38,0.82);z-index:9999;display:flex;flex-direction:column;';
   const sel = 'font-size:13px;padding:5px 8px;border:1px solid #c9d2db;border-radius:6px;background:#fff;color:#1d2733;'; // white dropdown — readable
   const fileCtl = pdfFiles.length > 1
     ? `<select id="mt-file" style="${sel}">${pdfFiles.map((f, i) => `<option value="${i}">${escapeHtml(f.name)}</option>`).join('')}</select>`
     : `<span style="font-size:12px;opacity:.75;">${escapeHtml(pdfFiles[0].name)}</span>`;
   back.innerHTML = `
+    <style>
+      .mt-modal .btn.ghost { color:#fff; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.5); }
+      .mt-modal .btn.ghost:hover { background:rgba(255,255,255,0.24); border-color:#fff; }
+      .mt-modal #mt-use { background:#3da35a; color:#fff; border:1px solid #3da35a; font-weight:600; }
+      .mt-modal #mt-use:hover { background:#33934d; }
+    </style>
     <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#1d2733;color:#fff;flex-wrap:wrap;">
       <strong style="font-size:15px;">Measure on plan</strong>
       ${fileCtl}
