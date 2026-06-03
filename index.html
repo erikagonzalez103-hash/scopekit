@@ -8314,10 +8314,10 @@ async function openMeasureTool() {
     const b = $m('#mt-banner');
     if (multiplier == null || mode === 'calibrate') {
       b.style.background = '#b8742b';
-      b.innerHTML = 'STEP 1 · Set the scale — click the two ends of a measurement you already know on the plan (like a wall marked 5\'-0"). Then type how long it really is.';
+      b.innerHTML = 'STEP 1 · Set the scale — click the two ends of a dimension you already know (pick the LONGEST one you can, like 13\'-2", for best accuracy). Then type how long it really is.';
     } else {
       b.style.background = '#2563a8';
-      b.innerHTML = 'STEP 2 · Measure — click the two ends of anything to get its real size. To drop it into a field: click that field on the review screen first, then “Use this →”.';
+      b.innerHTML = 'STEP 2 · Measure — click the two ends of anything; its real size shows below as “Length”. Just read that number and type it into the form. (“Use this →” auto-fills only if you clicked a field <em>before</em> opening this tool.)';
     }
   }
   function drawOverlay() {
