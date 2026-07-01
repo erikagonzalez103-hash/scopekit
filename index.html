@@ -1927,6 +1927,20 @@ a { color: var(--navy); }
         </div>
       </div>
 
+      <div class="card marked">
+        <div class="card-h">
+          <h2 class="card-title">Designer references</h2>
+          <span class="card-meta">Optional</span>
+        </div>
+        <div class="dropzone" data-target="designer-refs">
+          <div class="dz-icon">✦</div>
+          <div class="dz-title">Upload selection sheets / mood-board photos</div>
+          <div class="dz-hint">Claude distills these into the render's style prompt — tile, palette, hardware, mood</div>
+          <input type="file" accept="image/*" multiple class="sr-only" />
+        </div>
+        <div class="dropzone-files" id="designer-refs-files"></div>
+      </div>
+
       <div class="grid grid-2">
         <div class="card marked">
           <h2 class="card-title" style="margin-bottom: 10px;">3 · Builder</h2>
@@ -2494,7 +2508,7 @@ const FLAG_RULES = [
     test: (bath, builder, state) => {
       if (builder?.id !== 'lingenfelter') return null;
       if (state?.bathrooms?.[0]?.id !== bath.id) return null;
-      // Check whether job-specific designer references are present (intake field — placeholder for now)
+      // Check whether job-specific designer references are present (uploaded via the intake "Designer references" card)
       if (!state?.designerReferences || state.designerReferences.length === 0) {
         return {
           message: `Lingenfelter job — no designer reference images uploaded yet.`,
@@ -2962,7 +2976,10 @@ function parseOpeningWH(bath, cfg, defaults) {
   const v = String(bath && bath.shower && bath.shower.dims ? bath.shower.dims.value : '');
   const m = v.match(/(\d+(?:\.\d+)?)\s*["']?\s*[×x]\s*(\d+(?:\.\d+)?)/);
   let W = m ? parseFloat(m[1]) : (parseShowerWidth(bath) || defaults.w || null);
-  let H = m ? parseFloat(m[2]) : null;
+  // Plans write the footprint as W × D (e.g. 60" × 36" = floor size). A second
+  // number under 60" is depth, not glass height — glass height comes from the
+  // config. Only read it as a height when it's plausibly one (≥ 60").
+  let H = m && parseFloat(m[2]) >= 60 ? parseFloat(m[2]) : null;
   if (H == null) {
     const ghs = cfg && cfg.glassHeight === 'Custom' ? (cfg.customGlassHeight || '') : (cfg ? cfg.glassHeight || '' : '');
     H = toInches(ghs) || defaults.h || null;
@@ -3497,6 +3514,8 @@ function buildRenderPayload(bath, cfg) {
     prompt: buildEffectivePrompt(profile, cfg, bath),  // input 3: text (in-situ scene)
     composition: profile.composition,
     cropStyle: profile.cropStyle,
+    // Kept so runRender can rebuild the prompt if style distillation lands late.
+    _bath: bath, _cfg: cfg, _profile: profile,
   };
 }
 
@@ -3511,7 +3530,10 @@ function buildSceneContext(bath, cfg) {
   const app = tmpl.app || 'shower';
   const showerDesc = {
     'inline-2': 'a walk-in shower with a fixed glass panel over a pony wall and a swing glass door',
+    'inline-2-no-pony': 'a walk-in shower with a fixed glass panel and a swing glass door across the full-height opening',
     'inline': 'a walk-in shower with a single fixed glass panel',
+    'inline-pony': 'a walk-in shower with a glass panel over a pony wall extending toward the ceiling',
+    'dual': 'a walk-in shower with a swing glass door and a fixed glass panel',
     'single-slider': 'a shower with one sliding glass door beside a fixed glass panel',
     'bypass': 'a shower with bypass sliding glass doors',
     'pivot': 'a walk-in shower with a single pivoting glass door',
@@ -3522,19 +3544,35 @@ function buildSceneContext(bath, cfg) {
     'box-3-pony': 'a three-panel glass shower enclosure on a pony wall',
     'box-4-2pony': 'a four-panel glass shower enclosure on pony walls',
   }[layout];
+  // Humanize the extraction's shower type — never leak raw tokens like "alcove-3-wall" into the prompt.
+  const typeDesc = {
+    'alcove-3-wall': 'set in a tiled three-wall alcove',
+    'alcove': 'set in a tiled alcove',
+  };
   if (app === 'tub') parts.push('a tub with a glass tub enclosure');
   else if (showerDesc) parts.push(showerDesc);
-  else if (bath.shower && bath.shower.type && bath.shower.type.value && !/none|tbd|—/i.test(bath.shower.type.value)) parts.push('a glass ' + String(bath.shower.type.value).toLowerCase());
+  else if (bath.shower && bath.shower.type && bath.shower.type.value && !/none|tbd|—/i.test(bath.shower.type.value)) {
+    const tv = String(bath.shower.type.value).toLowerCase();
+    parts.push(typeDesc[tv] ? 'a walk-in glass shower ' + typeDesc[tv] : 'a walk-in glass shower');
+  }
+  if (showerDesc && bath.shower && bath.shower.type && typeDesc[String(bath.shower.type.value || '').toLowerCase()]) {
+    parts.push(typeDesc[String(bath.shower.type.value).toLowerCase()]);
+  }
 
   const panels = (typeof getShowerPanels === 'function') ? getShowerPanels(bath, cfg) : [];
   if (panels.length) {
     const maxH = Math.max.apply(null, panels.map(p => p.h || 0));
-    if (maxH) parts.push('glass about ' + Math.round(maxH) + ' inches tall');
+    // Spell out every panel with its role and width — this is what keeps the
+    // render dimensionally honest alongside the control image.
+    const widths = panels.map(p => Math.round(p.w) + ' inch wide ' + String(p.role || 'panel').toLowerCase()).join(' and a ');
+    const opening = Math.round(panels.reduce((a, p) => a + p.w, 0));
+    parts.push('glass panels across a roughly ' + opening + ' inch opening: a ' + widths);
+    if (maxH) parts.push('glass ' + Math.round(maxH) + ' inches tall');
   }
   (bath.shower && bath.shower.features || []).forEach(f => {
     if (/pony|knee/i.test(f)) parts.push(String(f).toLowerCase());
-    if (/niche/i.test(f)) parts.push('a tiled niche');
-    if (/bench/i.test(f)) parts.push('a tiled bench');
+    if (/niche/i.test(f)) parts.push('a recessed tile shampoo niche in the shower wall');
+    if (/bench/i.test(f)) parts.push('a built-in tiled bench seat clearly visible inside the shower');
   });
 
   const vc = (bath.vanity && bath.vanity.count) || 0;
@@ -3576,9 +3614,23 @@ function buildEffectivePrompt(profile, cfg, bath) {
     'Framed': 'framed glass enclosure',
   };
 
+  // Job-specific designer references (distilled by Claude vision at intake)
+  // override the builder profile's stock styling.
+  // The config's hardware finish is authoritative — drop any conflicting finish
+  // callouts so the prompt doesn't contradict itself (e.g. Hines profile says
+  // "matte black plumbing fixtures" while the job is specced brushed nickel).
+  let profilePrompt = state.designerStyle || profile.prompt || '';
+  if (cfg.finish) {
+    const finishWord = cfg.finish.split(' ')[0];
+    profilePrompt = profilePrompt.split(', ').filter(seg =>
+      !/matte black|chrome|brushed nickel|polished brass|champagne bronze|gold hardware|black hardware|black fixtures|black plumbing/i.test(seg)
+      || new RegExp(finishWord, 'i').test(seg)
+    ).join(', ');
+  }
+
   const parts = [
     'photorealistic interior photograph of a bathroom',
-    profile.prompt,
+    profilePrompt,
     ...buildSceneContext(bath, cfg),
     frameMap[cfg.frame] || cfg.frame,
     `${cfg.glass || '3/8"'} ${treatmentMap[cfg.treatment] || cfg.treatment || 'clear glass'}`,
@@ -4608,7 +4660,67 @@ function handleFiles(target, fileList) {
   } else if (target === 'ho-photos') {
     state.hoPhotos = files;
     renderFileList('#ho-photos-files', files);
+  } else if (target === 'designer-refs') {
+    state.designerReferences = files;
+    renderFileList('#designer-refs-files', files);
+    // Kick off style distillation immediately so it's ready by render time.
+    state.designerStylePromise = distillStyleFromReferences(files).catch(err => {
+      console.warn('[ScopeKit style] distillation failed:', err.message);
+      return null;
+    });
   }
+}
+
+// =============== DESIGNER-REFERENCE STYLE DISTILLATION ===============
+// Reference photos can't be fed to Flux Canny directly (it only takes the
+// geometry control image), so Claude vision distills them into a style
+// descriptor that replaces the builder profile's stock prompt. Result is
+// cached on state; distillation starts at upload so renders don't wait.
+async function fileToJpegBase64(file, maxDim) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('Could not read image ' + file.name));
+      i.src = url;
+    });
+    const scale = Math.min(1, (maxDim || 900) / Math.max(img.width, img.height));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.width * scale);
+    cv.height = Math.round(img.height * scale);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/jpeg', 0.82).split(',')[1];
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function distillStyleFromReferences(files) {
+  const images = [];
+  for (const f of files.slice(0, 4)) { // 4 refs is plenty for a style read
+    images.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: await fileToJpegBase64(f, 900) } });
+  }
+  const res = await fetch(API_CONFIG.workerUrl + '/api/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 250,
+      messages: [{
+        role: 'user',
+        content: [
+          ...images,
+          { type: 'text', text: 'These are designer reference photos for a bathroom job (selection sheets or mood boards). Distill them into ONE comma-separated image-generation style descriptor of 30-50 words covering: tile material/pattern/color, wall and floor finishes, color palette, hardware finish, lighting mood, overall style era. Describe materials and mood only — NO dimensions, NO layout, NO panel counts. Reply with the descriptor only, no preamble.' }
+        ]
+      }]
+    }),
+  });
+  const data = await res.json();
+  const text = data && data.content && data.content[0] && data.content[0].text ? data.content[0].text.trim() : '';
+  if (!text) throw new Error('empty style response');
+  state.designerStyle = text;
+  return text;
 }
 function renderFileList(sel, files) {
   const wrap = $(sel);
@@ -4678,6 +4790,9 @@ function resetJob() {
     mirrorConfigs: {},
     extracting: false,
     fieldMeasureData: null,
+    designerReferences: [],
+    designerStyle: null,
+    designerStylePromise: null,
   });
   // Reset DOM
   $('#builder-select').value = '';
@@ -4687,6 +4802,7 @@ function resetJob() {
   $('#ho-dims').value = '';
   $('#plan-files').innerHTML = '';
   $('#ho-photos-files').innerHTML = '';
+  if ($('#designer-refs-files')) $('#designer-refs-files').innerHTML = '';
   $$('#sketch-picker .sketch').forEach(x => x.classList.remove('is-active'));
   $('#revision-flag').checked = false;
   $$('input[name=sg-template]').forEach(r => r.checked = r.value === 'no');
@@ -4838,7 +4954,7 @@ Return JSON ONLY, no prose, no markdown, in this exact shape:
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1000,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -4907,7 +5023,7 @@ async function extractViaWorker() {
   async function callWorker(prompt, maxTokens) {
     const content = docContents.concat([{ type: 'text', text: prompt }]);
     const body = {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: maxTokens || 8000,
       messages: [{ role: 'user', content }],
     };
@@ -5570,7 +5686,7 @@ async function extractFieldMeasureViaClaude(files) {
   content.push({ type: 'text', text: FIELD_MEASURE_PROMPT });
 
   const body = {
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 8000,
     messages: [{ role: 'user', content }],
   };
@@ -8107,7 +8223,7 @@ function showRenderPipeline(bath, cfg) {
         <span class="tag">Geometry</span>
       </div>
       <div class="pipeline-step-content">
-        <div class="desc">A 2D elevation auto-generated from your Configure step — the panels, pony wall, and glass heights to scale. (Today the photo is generated from the written description below; this elevation is your at-a-glance check that the geometry is right.)</div>
+        <div class="desc">A 2D elevation auto-generated from your Configure step — the panels, pony wall, and glass heights to scale. This diagram is rasterized and sent as the control image, so the photo is locked to this geometry — check it before rendering.</div>
         <div class="pipeline-diagram-preview">
           ${buildShowerElevationSVG(bath, cfg)}
         </div>
@@ -8123,15 +8239,20 @@ function showRenderPipeline(bath, cfg) {
         <span class="tag">Style anchor</span>
       </div>
       <div class="pipeline-step-content">
-        <div class="desc">${escapeHtml(profile.label)}. ${isJobSpecific ?
-          'Custom builder — uses job-specific designer references uploaded at intake.' :
-          'Builder profile defaults — past portfolio photos passed alongside the prompt as visual style anchors.'}</div>
+        <div class="desc">${escapeHtml(profile.label)}. ${(state.designerReferences && state.designerReferences.length) ?
+          `${state.designerReferences.length} designer reference photo${state.designerReferences.length > 1 ? 's' : ''} from intake — ${state.designerStyle ? 'distilled into the style prompt below by Claude vision.' : 'style distillation in progress; the render waits for it.'}` :
+          (isJobSpecific ?
+            'Custom builder — upload designer references at intake to drive the style. None uploaded on this job, falling back to profile text.' :
+            'No job-specific references uploaded — style comes from the builder profile text below. (Upload selection sheets at intake to override.)')}</div>
         <div class="pipeline-refs">
-          ${isJobSpecific ?
-            `<div class="pipeline-ref-tile job-specific">JOB-SPECIFIC<br><span style="font-size:10px;">Upload at intake</span></div>` :
-            (profile.references.length ? profile.references.map(r => `<div class="pipeline-ref-tile">${escapeHtml(r)}</div>`).join('') :
-            `<div class="pipeline-ref-tile">No refs configured</div>`)}
+          ${(state.designerReferences && state.designerReferences.length) ?
+            state.designerReferences.map(f => `<div class="pipeline-ref-tile">✓ ${escapeHtml(f.name)}</div>`).join('') :
+            (isJobSpecific ?
+              `<div class="pipeline-ref-tile job-specific">JOB-SPECIFIC<br><span style="font-size:10px;">Upload at intake</span></div>` :
+              (profile.references.length ? profile.references.map(r => `<div class="pipeline-ref-tile">${escapeHtml(r)}</div>`).join('') :
+              `<div class="pipeline-ref-tile">No refs configured</div>`))}
         </div>
+        ${state.designerStyle ? `<div style="margin-top:10px;font-size:12px;color:var(--muted);font-style:italic;">Distilled style: ${escapeHtml(state.designerStyle)}</div>` : ''}
         ${profile.notes ? `<div style="margin-top:10px;font-size:12px;color:var(--muted);font-style:italic;">${escapeHtml(profile.notes)}</div>` : ''}
       </div>
     </div>
@@ -8157,7 +8278,7 @@ function showRenderPipeline(bath, cfg) {
     <div class="pipeline-output" id="pipeline-render-output">
       <strong>Photoreal render</strong>
       <div class="meta" id="pipeline-render-meta">${API_CONFIG.workerUrl && API_CONFIG.fluxEnabled ?
-        `Calling Flux Schnell on Replicate…` :
+        `Calling Flux Canny on Replicate (geometry-conditioned)…` :
         API_CONFIG.workerUrl ? `Worker URL set but fluxEnabled is off — flip it in API_CONFIG to render` :
         `Pipeline ready · awaiting worker deployment`}</div>
       <div id="pipeline-render-image" style="margin-top: 14px;"></div>
@@ -8213,23 +8334,43 @@ function closeRenderPipeline() {
 
 // =============== RENDER FETCH ===============
 // Posts to the Cloudflare Worker /api/render endpoint, which proxies to
-// Replicate (Flux Schnell by default). Replaces the loading meta + injects
-// the returned image into the modal output area on success.
-async function runRender(payload) {
-  const startedAt = Date.now();
+// Replicate. Primary path: Flux Canny (geometry-conditioned) — the constraint
+// diagram is rasterized to a PNG and sent as the control image, so panel count,
+// widths, and heights in the render match the cut list. Falls back to
+// text-only Flux Schnell if the conditioned call fails.
+
+// Rasterize the constraint SVG to a PNG data URI. Text labels are stripped
+// first — canny edge detection would otherwise bake dimension strings into
+// the render as phantom geometry.
+async function rasterizeConstraintSvg(svg, scale) {
+  const clean = svg.replace(/<text[^>]*>[\s\S]*?<\/text>/g, '');
+  const blob = new Blob([clean], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('SVG rasterization failed'));
+      i.src = url;
+    });
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.width * (scale || 2));
+    cv.height = Math.round(img.height * (scale || 2));
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function postRender(body) {
   const res = await fetch(API_CONFIG.workerUrl + '/api/render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      prompt: payload.prompt,
-      // Sized to match Flux Schnell defaults; ControlNet upgrade can extend this later.
-      input: {
-        prompt: payload.prompt,
-        aspect_ratio: '16:9',
-        output_format: 'webp',
-        output_quality: 90,
-      },
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const txt = await res.text();
@@ -8241,10 +8382,56 @@ async function runRender(payload) {
     throw new Error(data.error + (detailStr ? ' — ' + detailStr : ''));
   }
   if (!data.image_url) throw new Error('No image_url in worker response');
+  return data;
+}
+
+async function runRender(payload) {
+  const startedAt = Date.now();
+  // If designer-reference style distillation is still in flight, wait for it and
+  // rebuild the prompt so the render reflects the uploaded references.
+  if (state.designerStylePromise && !state.designerStyle) {
+    const meta0 = $('#pipeline-render-meta');
+    if (meta0) meta0.textContent = 'Distilling designer references…';
+    await state.designerStylePromise;
+    if (state.designerStyle && payload._bath) {
+      payload.prompt = buildEffectivePrompt(payload._profile, payload._cfg, payload._bath);
+      const pt = $('#mt-prompt-text');
+      if (pt) pt.textContent = payload.prompt;
+    }
+  }
+  let data, via;
+  try {
+    const controlImage = await rasterizeConstraintSvg(payload.constraintSvg, 2);
+    data = await postRender({
+      model: 'black-forest-labs/flux-canny-dev',
+      input: {
+        prompt: payload.prompt,
+        control_image: controlImage,
+        guidance: 30,
+        output_format: 'webp',
+        output_quality: 90,
+      },
+    });
+    via = 'Flux Canny · geometry-locked to the constraint diagram';
+  } catch (e) {
+    // Conditioned render failed (model schema drift, rasterization, etc.) —
+    // fall back to text-only Schnell so the pipeline still produces something.
+    console.warn('[ScopeKit render] canny path failed, falling back to schnell:', e.message);
+    data = await postRender({
+      prompt: payload.prompt,
+      input: {
+        prompt: payload.prompt,
+        aspect_ratio: '16:9',
+        output_format: 'webp',
+        output_quality: 90,
+      },
+    });
+    via = 'Flux Schnell · TEXT-ONLY FALLBACK — geometry not enforced, verify against the diagram';
+  }
 
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
   const meta = $('#pipeline-render-meta');
-  if (meta) meta.textContent = `Generated via Flux Schnell · ${elapsed}s · click image to open full size`;
+  if (meta) meta.textContent = `Generated via ${via} · ${elapsed}s · click image to open full size`;
   const imgArea = $('#pipeline-render-image');
   if (imgArea) {
     imgArea.innerHTML = `<a href="${data.image_url}" target="_blank" rel="noopener"><img id="render-img" crossorigin="anonymous" src="${data.image_url}" alt="In-situ render" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--hairline); display: block;"></a>`
