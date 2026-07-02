@@ -3621,11 +3621,12 @@ function buildEffectivePrompt(profile, cfg, bath) {
   // "matte black plumbing fixtures" while the job is specced brushed nickel).
   let profilePrompt = state.designerStyle || profile.prompt || '';
   if (cfg.finish) {
-    const finishWord = cfg.finish.split(' ')[0];
-    profilePrompt = profilePrompt.split(', ').filter(seg =>
-      !/matte black|chrome|brushed nickel|polished brass|champagne bronze|gold hardware|black hardware|black fixtures|black plumbing/i.test(seg)
-      || new RegExp(finishWord, 'i').test(seg)
-    ).join(', ');
+    // Hyphen/space tolerant ("champagne-bronze" == "champagne bronze"); a segment
+    // survives only if it names the FULL configured finish, not just a shared
+    // word like "brushed".
+    const conflictRe = /matte[\s-]black|chrome|brushed[\s-]nickel|polished[\s-]brass|champagne[\s-]bronze|gold|bronze|brass|black[\s-](hardware|fixtures|plumbing|fittings)/i;
+    const finishRe = new RegExp(cfg.finish.trim().replace(/\s+/g, '[\\s-]'), 'i');
+    profilePrompt = profilePrompt.split(', ').filter(seg => !conflictRe.test(seg) || finishRe.test(seg)).join(', ');
   }
 
   const parts = [
