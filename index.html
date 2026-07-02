@@ -4439,13 +4439,22 @@ function vmFmtInches(v) {
 // footprint on a floor-plan sheet and fill dims from measured vector geometry.
 async function autoMeasureShowerDims(files, tlResult, bathrooms) {
   if (!tlResult || !Array.isArray(bathrooms) || !bathrooms.length || !window.pdfjsLib) return;
-  const needy = bathrooms.filter(b => {
-    const v = String(b.shower?.dims?.value || '').toLowerCase();
-    const noDims = !v || v === 'unknown' || v === 'tbd' || v === '—' || b.shower?.dims?.conf === 'low';
-    const tubOnly = /tub[\s-]only/i.test(String(b.shower?.type?.value || ''));
-    return b.shower && noDims && !tubOnly;
-  });
-  if (!needy.length) return;
+  // Group by normalized bath name: extraction can briefly hold duplicate bath
+  // objects (vision + text-layer copies, reconciled later) — measure once per
+  // NAME and fill every copy, so the surviving object always carries the dims.
+  const needyGroups = new Map();
+  for (const b of bathrooms) {
+    if (!b.shower) continue;
+    const v = String(b.shower.dims?.value || '').toLowerCase();
+    const noDims = !v || v === 'unknown' || v === 'tbd' || v === '—' || v === '-' || b.shower.dims?.conf === 'low';
+    const tubOnly = /tub[\s-]only/i.test(String(b.shower.type?.value || ''));
+    if (!noDims || tubOnly) continue;
+    const key = (b.name || b.room?.value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!key) continue;
+    if (!needyGroups.has(key)) needyGroups.set(key, []);
+    needyGroups.get(key).push(b);
+  }
+  if (!needyGroups.size) return;
 
   const rooms = tlResult.rooms || [];
   const showerLabels = tlResult.showers || [];
@@ -4480,35 +4489,33 @@ async function autoMeasureShowerDims(files, tlResult, bathrooms) {
           const cyTop = pageH - (cand.y1 + cand.y2) / 2; // flip to top-left to match text coords
           const yTop1 = pageH - cand.y2, yTop2 = pageH - cand.y1;
           const insideTerm = pgShowerLabels.some(s => s.x >= cand.x1 - 10 && s.x <= cand.x2 + 10 && s.y >= yTop1 - 10 && s.y <= yTop2 + 10);
-          for (const bath of needy) {
-            const bathName = (bath.name || bath.room?.value || '').toLowerCase().replace(/\s+/g, ' ').trim();
-            if (!bathName) continue;
+          for (const bathName of needyGroups.keys()) {
             const labels = rooms.filter(r => r.sourceFile === file.name && r.pageNum === pg.pageNum && r.isBath !== false
               && (r.name || '').toLowerCase().replace(/\s+/g, ' ').trim() === bathName);
             for (const lb of labels) {
               const d = Math.hypot(lb.x - cx, lb.y - cyTop);
               if (d > 420) continue; // too far to be this room's shower
-              scored.push({ bath, cand, pageNum: pg.pageNum, insideTerm, inPerPt, score: d - (insideTerm ? 250 : 0) });
+              scored.push({ bathName, cand, pageNum: pg.pageNum, insideTerm, inPerPt, score: d - (insideTerm ? 250 : 0) });
             }
           }
         }
       }
-      // Greedy unique assignment: best score first, one candidate per bath, one bath per candidate.
+      // Greedy unique assignment: best score first, one candidate per bath name,
+      // one bath name per candidate. Fill EVERY duplicate object for the name.
       scored.sort((a, b) => a.score - b.score);
-      const doneBaths = new Set(), doneCands = new Set();
+      const doneNames = new Set(), doneCands = new Set();
       for (const s of scored) {
-        if (doneBaths.has(s.bath) || doneCands.has(s.cand)) continue;
-        doneBaths.add(s.bath); doneCands.add(s.cand);
+        if (doneNames.has(s.bathName) || doneCands.has(s.cand)) continue;
+        doneNames.add(s.bathName); doneCands.add(s.cand);
         const short = Math.min(s.cand.wIn, s.cand.hIn), long = Math.max(s.cand.wIn, s.cand.hIn);
-        s.bath.shower.dims = {
-          value: vmFmtInches(short) + ' x ' + vmFmtInches(long),
-          conf: s.insideTerm ? 'high' : 'med',
-          mode: 'auto',
-        };
-        s.bath.shower.dimsSource = 'Measured from plan vector geometry (X-marked pan, interior tile-to-tile), sheet ' + s.pageNum;
-        s.bath.flags = s.bath.flags || [];
-        s.bath.flags.push({ kind: 'info', text: 'Shower footprint ' + s.bath.shower.dims.value + ' measured from the drawing\'s vector geometry at sheet scale (sheet ' + s.pageNum + '). Interior tile-to-tile — glass opening is the ' + vmFmtInches(short) + ' face unless the door goes on the long side.' });
-        console.log('[ScopeKit VM]', (s.bath.name || s.bath.room?.value), '->', s.bath.shower.dims.value, 'sheet', s.pageNum, 'insideTerm:', s.insideTerm);
+        const dimsValue = vmFmtInches(short) + ' x ' + vmFmtInches(long);
+        for (const bath of needyGroups.get(s.bathName)) {
+          bath.shower.dims = { value: dimsValue, conf: s.insideTerm ? 'high' : 'med', mode: 'auto' };
+          bath.shower.dimsSource = 'Measured from plan vector geometry (X-marked pan, interior tile-to-tile), sheet ' + s.pageNum;
+          bath.flags = bath.flags || [];
+          bath.flags.push({ kind: 'info', text: 'Shower footprint ' + dimsValue + ' measured from the drawing\'s vector geometry at sheet scale (sheet ' + s.pageNum + '). Interior tile-to-tile — glass opening is the ' + vmFmtInches(short) + ' face unless the door goes on the long side.' });
+        }
+        console.log('[ScopeKit VM]', s.bathName, '->', dimsValue, 'sheet', s.pageNum, 'insideTerm:', s.insideTerm, '(' + needyGroups.get(s.bathName).length + ' object(s) filled)');
       }
     } catch (e) {
       console.warn('[ScopeKit VM] vector measure failed for', file.name, e);
