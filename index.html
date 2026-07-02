@@ -4613,7 +4613,35 @@ builderSelect.addEventListener('change', () => {
     archSel.innerHTML = '<option value="">— Select builder first —</option>';
   }
 });
-$('#architect-select').addEventListener('change', e => state.architect = e.target.value);
+$('#architect-select').addEventListener('change', e => {
+  let val = e.target.value;
+  if (val === '__new__') {
+    const name = (prompt('New architect / firm name:') || '').trim();
+    if (!name) { e.target.value = ''; state.architect = ''; return; }
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    e.target.insertBefore(opt, e.target.querySelector('option[value="__new__"]'));
+    e.target.value = name;
+    val = name;
+  }
+  state.architect = val;
+  captureArchitectToCRM(val);
+});
+
+// Phase 3 (Eridion HQ): every architect who appears on a plan becomes a CRM
+// contact on the Architect Warm sequence — the warmest cold list we have.
+// Fire-and-forget; ScopeKit keeps working offline.
+function captureArchitectToCRM(name) {
+  if (!name || name === '__new__') return;
+  const builderName = (BUILDERS.find(x => x.id === state.builder) || {}).name || '';
+  fetch('https://frosty-base-f01e.erikagonzalez103.workers.dev/crm/upsert-contact', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      co: name, role: 'Architect', seq_id: 'architect_warm', source: 'scopekit',
+      notes: 'Seen on a plan' + (builderName ? ' for ' + builderName : '') + (state.address ? ' — ' + state.address : '') + ' (' + new Date().toISOString().slice(0, 10) + ')',
+    }),
+  }).catch(() => {});
+}
 $('#project-address').addEventListener('input', e => state.address = e.target.value);
 $('#comm-input').addEventListener('input', e => state.comm = e.target.value);
 $('#revision-flag').addEventListener('change', e => state.revision = e.target.checked);
