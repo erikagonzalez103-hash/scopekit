@@ -4330,6 +4330,194 @@ function associateDimsToBaths(dims, rooms) {
 
 // Master entry: extract text layers from all uploaded PDFs and return findings.
 // Returns: { mirrors: [...], rooms: [...], associations: [...], rawByFile: {...} }
+// =============== VECTOR SHOWER MEASUREMENT ===============
+// Measures shower footprints directly from the plan's vector geometry.
+// Architectural PDFs (Revit/Chief Architect exports) draw the shower pan as an
+// X-marked rectangle in real coordinates; the sheet's own scale ("1/4\" = 1'")
+// converts drawn points to real inches. This is deterministic measurement —
+// no vision guessing — and it reads the INTERIOR (tile-to-tile) size, which is
+// what glass is actually cut to (printed plan dims are usually stud-to-stud).
+
+function vmMatMul(m1, m2) {
+  return [m1[0]*m2[0]+m1[1]*m2[2], m1[0]*m2[1]+m1[1]*m2[3], m1[2]*m2[0]+m1[3]*m2[2], m1[2]*m2[1]+m1[3]*m2[3], m1[4]*m2[0]+m1[5]*m2[2]+m2[4], m1[4]*m2[1]+m1[5]*m2[3]+m2[5]];
+}
+function vmApply(m, x, y) { return [m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]]; }
+
+// Walk a page's operator list, tracking the transform stack, and return every
+// straight line segment in page coordinates (PDF origin: bottom-left).
+async function collectVectorSegments(page) {
+  const OPS = pdfjsLib.OPS;
+  const opList = await page.getOperatorList();
+  if (opList.fnArray.length > 500000) { console.warn('[ScopeKit VM] page too heavy, skipping vector pass'); return null; }
+  const segs = [];
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const stack = [];
+  for (let i = 0; i < opList.fnArray.length; i++) {
+    const fn = opList.fnArray[i], args = opList.argsArray[i];
+    if (fn === OPS.save) stack.push(ctm.slice());
+    else if (fn === OPS.restore) { if (stack.length) ctm = stack.pop(); }
+    else if (fn === OPS.transform) ctm = vmMatMul(args, ctm);
+    else if (fn === OPS.constructPath) {
+      const subOps = args[0], coords = args[1];
+      let ci = 0, cur = null, start = null;
+      for (const op of subOps) {
+        if (op === OPS.moveTo) { cur = vmApply(ctm, coords[ci], coords[ci+1]); start = cur; ci += 2; }
+        else if (op === OPS.lineTo) { const p = vmApply(ctm, coords[ci], coords[ci+1]); if (cur) segs.push([cur[0], cur[1], p[0], p[1]]); cur = p; ci += 2; }
+        else if (op === OPS.curveTo) ci += 6;
+        else if (op === OPS.curveTo2 || op === OPS.curveTo3) ci += 4;
+        else if (op === OPS.closePath) { if (cur && start) segs.push([cur[0], cur[1], start[0], start[1]]); cur = start; }
+        else if (op === OPS.rectangle) {
+          const x = coords[ci], y = coords[ci+1], w = coords[ci+2], h = coords[ci+3];
+          const p1 = vmApply(ctm, x, y), p2 = vmApply(ctm, x+w, y), p3 = vmApply(ctm, x+w, y+h), p4 = vmApply(ctm, x, y+h);
+          segs.push([p1[0],p1[1],p2[0],p2[1]], [p2[0],p2[1],p3[0],p3[1]], [p3[0],p3[1],p4[0],p4[1]], [p4[0],p4[1],p1[0],p1[1]]);
+          ci += 4;
+        }
+      }
+    }
+  }
+  return segs;
+}
+
+// Shower pans are drawn as a rectangle with corner-to-corner diagonals (an X).
+// Find pairs of opposite-slope diagonals sharing a bounding box.
+function findXMarkedRects(segs, inPerPt) {
+  const MIN_IN = 18, MAX_IN = 140, TOL = 6;
+  const cands = [];
+  for (const s of segs) {
+    const dx = Math.abs(s[2]-s[0]), dy = Math.abs(s[3]-s[1]);
+    if (dx < 4 || dy < 4) continue; // not a diagonal
+    const bx1 = Math.min(s[0], s[2]), bx2 = Math.max(s[0], s[2]);
+    const by1 = Math.min(s[1], s[3]), by2 = Math.max(s[1], s[3]);
+    const wIn = (bx2-bx1) * inPerPt, hIn = (by2-by1) * inPerPt;
+    if (wIn < MIN_IN || wIn > MAX_IN || hIn < MIN_IN || hIn > MAX_IN) continue;
+    cands.push({ bx1, bx2, by1, by2, w: bx2-bx1, h: by2-by1, slope: Math.sign((s[3]-s[1])/(s[2]-s[0])) });
+  }
+  const xs = [];
+  for (let i = 0; i < cands.length; i++) for (let j = i+1; j < cands.length; j++) {
+    const a = cands[i], b = cands[j];
+    if (a.slope === b.slope) continue;
+    if (Math.abs(a.bx1-b.bx1) > TOL || Math.abs(a.bx2-b.bx2) > TOL || Math.abs(a.by1-b.by1) > TOL || Math.abs(a.by2-b.by2) > TOL) continue;
+    xs.push({ x1: Math.min(a.bx1,b.bx1), x2: Math.max(a.bx2,b.bx2), y1: Math.min(a.by1,b.by1), y2: Math.max(a.by2,b.by2),
+              wIn: ((a.w+b.w)/2) * inPerPt, hIn: ((a.h+b.h)/2) * inPerPt });
+  }
+  // Collapse duplicates (double-line walls draw inner+outer X candidates a few pts apart — keep the smaller/inner one, it's the tile face)
+  const uniq = [];
+  for (const x of xs.sort((p, q) => (p.wIn*p.hIn) - (q.wIn*q.hIn))) {
+    if (!uniq.some(u => Math.abs(u.x1-x.x1) < 12 && Math.abs(u.y1-x.y1) < 12)) uniq.push(x);
+  }
+  return uniq;
+}
+
+// Parse the sheet's drawing scale from its text layer -> real inches per PDF point.
+// "1/4\" = 1'" at 72pt/in drawn: 12 real inches per (0.25 * 72) pts = 2/3 in/pt.
+function pageScaleInPerPt(tlPage) {
+  // Scan per assembled text run (NOT the whole page joined — title-block dates
+  // like "6/1/2026" concatenate into the scale string and poison the number).
+  const runs = (typeof assembleTextRuns === 'function') ? assembleTextRuns(tlPage.items) : tlPage.items;
+  const votes = {};
+  for (const run of runs) {
+    const s = String(run.str || '').replace(/\s+/g, '');
+    const m = s.match(/(?:scale:?)?(\d{1,2}(?:\/\d{1,2})?)["″“”]=1['′'']/i);
+    if (!m) continue;
+    votes[m[1]] = (votes[m[1]] || 0) + 1;
+  }
+  const best = Object.keys(votes).sort((a, b) => votes[b] - votes[a])[0];
+  if (!best) return null;
+  let drawnIn;
+  if (best.includes('/')) { const [n, d] = best.split('/').map(Number); drawnIn = n / d; }
+  else drawnIn = Number(best);
+  if (!drawnIn || drawnIn <= 0 || drawnIn > 3) return null;
+  return 12 / (drawnIn * 72);
+}
+
+function vmFmtInches(v) {
+  const r = Math.round(v * 4) / 4;
+  return (Number.isInteger(r) ? r : r.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')) + '"';
+}
+
+// Main pass: for every bath whose shower dims are unknown, find its X-marked
+// footprint on a floor-plan sheet and fill dims from measured vector geometry.
+async function autoMeasureShowerDims(files, tlResult, bathrooms) {
+  if (!tlResult || !Array.isArray(bathrooms) || !bathrooms.length || !window.pdfjsLib) return;
+  const needy = bathrooms.filter(b => {
+    const v = String(b.shower?.dims?.value || '').toLowerCase();
+    const noDims = !v || v === 'unknown' || v === 'tbd' || v === '—' || b.shower?.dims?.conf === 'low';
+    const tubOnly = /tub[\s-]only/i.test(String(b.shower?.type?.value || ''));
+    return b.shower && noDims && !tubOnly;
+  });
+  if (!needy.length) return;
+
+  const rooms = tlResult.rooms || [];
+  const showerLabels = tlResult.showers || [];
+
+  for (const file of files) {
+    const pages = (tlResult.pagesByFile || {})[file.name];
+    if (!pages) continue;
+    // Candidate sheets: any page with a bath room label. Elevation sheets can
+    // sneak in (they caption baths too) — the shower-term-inside bonus and
+    // unique assignment keep floor-plan pans winning; provenance names the
+    // sheet so a wrong pick is visible on the review card.
+    const floorPlanPages = pages.filter(pg =>
+      rooms.some(r => r.sourceFile === file.name && r.pageNum === pg.pageNum && r.isBath !== false));
+    if (!floorPlanPages.length) continue;
+
+    let pdf = null;
+    try {
+      pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+      const scored = []; // {bath, cand, score, pageNum, insideTerm, inPerPt}
+      for (const pg of floorPlanPages) {
+        const inPerPt = pageScaleInPerPt(pg);
+        if (!inPerPt) { console.warn('[ScopeKit VM] no scale found on sheet', pg.pageNum, '— skipping'); continue; }
+        const page = await pdf.getPage(pg.pageNum);
+        const segs = await collectVectorSegments(page);
+        if (!segs) continue;
+        const xRects = findXMarkedRects(segs, inPerPt);
+        if (!xRects.length) continue;
+        const pageH = pg.viewport.height;
+        const pgShowerLabels = showerLabels.filter(s => s.sourceFile === file.name && s.pageNum === pg.pageNum);
+        for (const cand of xRects) {
+          const cx = (cand.x1 + cand.x2) / 2;
+          const cyTop = pageH - (cand.y1 + cand.y2) / 2; // flip to top-left to match text coords
+          const yTop1 = pageH - cand.y2, yTop2 = pageH - cand.y1;
+          const insideTerm = pgShowerLabels.some(s => s.x >= cand.x1 - 10 && s.x <= cand.x2 + 10 && s.y >= yTop1 - 10 && s.y <= yTop2 + 10);
+          for (const bath of needy) {
+            const bathName = (bath.name || bath.room?.value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+            if (!bathName) continue;
+            const labels = rooms.filter(r => r.sourceFile === file.name && r.pageNum === pg.pageNum && r.isBath !== false
+              && (r.name || '').toLowerCase().replace(/\s+/g, ' ').trim() === bathName);
+            for (const lb of labels) {
+              const d = Math.hypot(lb.x - cx, lb.y - cyTop);
+              if (d > 420) continue; // too far to be this room's shower
+              scored.push({ bath, cand, pageNum: pg.pageNum, insideTerm, inPerPt, score: d - (insideTerm ? 250 : 0) });
+            }
+          }
+        }
+      }
+      // Greedy unique assignment: best score first, one candidate per bath, one bath per candidate.
+      scored.sort((a, b) => a.score - b.score);
+      const doneBaths = new Set(), doneCands = new Set();
+      for (const s of scored) {
+        if (doneBaths.has(s.bath) || doneCands.has(s.cand)) continue;
+        doneBaths.add(s.bath); doneCands.add(s.cand);
+        const short = Math.min(s.cand.wIn, s.cand.hIn), long = Math.max(s.cand.wIn, s.cand.hIn);
+        s.bath.shower.dims = {
+          value: vmFmtInches(short) + ' x ' + vmFmtInches(long),
+          conf: s.insideTerm ? 'high' : 'med',
+          mode: 'auto',
+        };
+        s.bath.shower.dimsSource = 'Measured from plan vector geometry (X-marked pan, interior tile-to-tile), sheet ' + s.pageNum;
+        s.bath.flags = s.bath.flags || [];
+        s.bath.flags.push({ kind: 'info', text: 'Shower footprint ' + s.bath.shower.dims.value + ' measured from the drawing\'s vector geometry at sheet scale (sheet ' + s.pageNum + '). Interior tile-to-tile — glass opening is the ' + vmFmtInches(short) + ' face unless the door goes on the long side.' });
+        console.log('[ScopeKit VM]', (s.bath.name || s.bath.room?.value), '->', s.bath.shower.dims.value, 'sheet', s.pageNum, 'insideTerm:', s.insideTerm);
+      }
+    } catch (e) {
+      console.warn('[ScopeKit VM] vector measure failed for', file.name, e);
+    } finally {
+      try { if (pdf) pdf.destroy(); } catch (e) {}
+    }
+  }
+}
+
 async function runTextLayerExtraction(files) {
   const result = { mirrors: [], rooms: [], associations: [], pagesByFile: {} };
   for (const file of files) {
@@ -4943,6 +5131,16 @@ async function runExtraction() {
         extractionResult = await extractCommViaClaude();
       } else {
         extractionResult = mockExtraction();
+      }
+
+      // Vector auto-measure: any bath still missing shower dims gets its
+      // footprint measured from the drawing's vector geometry at sheet scale.
+      if (textLayerData && extractionResult && Array.isArray(extractionResult.bathrooms) && extractionResult.bathrooms.length) {
+        try {
+          await autoMeasureShowerDims(state.planFiles, textLayerData, extractionResult.bathrooms);
+        } catch (vmErr) {
+          console.warn('[ScopeKit VM] vector auto-measure failed (non-fatal):', vmErr);
+        }
       }
     }
   } catch (err) {
